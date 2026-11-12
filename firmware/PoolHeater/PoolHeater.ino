@@ -1,7 +1,7 @@
 /****************************************************/
 /* Controlador de temperatura e filtro para piscina */
 /* Autor: Mario Pin                                 */
-/* Vesão: 0.2.2 - 21/10/2021                        */
+/* Vesão: 0.3.0 - 12/11/2021                        */
 /****************************************************/
 
 #include <LiquidCrystal.h>
@@ -42,7 +42,7 @@ const double R = 10000.0;
 LiquidCrystal lcd(RS, EN, D4, D5, D6, D7); //define pinos do LCD
 BigNums2x2 bigNuma(TREK); // inicializa as fontes grandes
 static DS1307 RTC1;  //cria instancia RTC
-SoftwareSerial BT_Serial(BT_RX, BT_TX); //inicializa software serial
+SoftwareSerial BT_Serial(BT_RX, BT_TX); //cria software serial
 
 //cria os possiveis estados do menu e inicializa em HOME
 enum Estados{HOME, GERAL, BOMBAS, AJUSTES_AQC, AJUSTES_FIL, PROG_1L, PROG_1D, PROG_2L, PROG_2D, AJUSTES_DH, HORA, DATA, SEMAN, 
@@ -91,7 +91,7 @@ int configuraDH (int param, int minimo, int maximo, int pos); //funcao para entr
 void setup(){
   lcd.begin(16,2); //inicializa LCD
   RTC1.begin();    //inicializa RTC
-  BT_Serial.begin(9600);
+  BT_Serial.begin(9600); //Inicializa serial Bluetooth
   
   //*** USAR SOMENTE na montagem inicial ***
   /*
@@ -150,7 +150,7 @@ void setup(){
   //tela de inicializacao
   byte i;
   lcd.setCursor(0,0);
-  lcd.print("MPS01-v0.2.2");
+  lcd.print("MPS01-v0.3.0");
   lcd.setCursor(0,1);
   for (i=0; i<=19; i++){
     lcd.write(255);
@@ -161,7 +161,7 @@ void setup(){
 void loop(){
   switch(estado){
     
-    case HOME:{  //*********************************************HOME**************************************************
+    case HOME:  //*********************************************HOME**************************************************
       lcd.clear();
       lcd.setCursor(7,1); lcd.write(223); lcd.print("C");
       while (digitalRead(PB_1) && digitalRead(PB_2) == HIGH){
@@ -201,11 +201,11 @@ void loop(){
         estado = GERAL;
       if (digitalRead(PB_1) == LOW)
         estado = BOMBAS;  
-      delay(200);
+      delay(100);
       break;
-      }
       
-    case GERAL:{  //****************************************************GERAL**************************************
+      
+    case GERAL:  //****************************************************GERAL**************************************
       lcd.clear();
       while (digitalRead(PB_2) && digitalRead(PB_3) == HIGH){
         atualiza_sistema();
@@ -237,14 +237,14 @@ void loop(){
         else
           lcd.print("CLT ");
         lcd.print(cltTemp, 1); lcd.write(223); lcd.print("C");
-        delay(200);
+        delay(100);
         }
       estado = HOME;
-      delay(200);
+      delay(100);
       break;
-      }
+      
     
-    case BOMBAS:{  //****************************Entrada de estados das bombas***********************************
+    case BOMBAS:  //****************************Entrada de estados das bombas***********************************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("ESTADO BOMBAS");
@@ -257,11 +257,11 @@ void loop(){
         estado = ADJ_BOMBAS; 
       if (digitalRead(PB_3) == LOW)
         estado = HOME;   
-      delay(200);
+      delay(100);
       break;
-      } 
+       
     
-    case ADJ_BOMBAS:{  //**********************Ajuste de estado das bombas**********************
+    case ADJ_BOMBAS:  //**********************Ajuste de estado das bombas**********************
       lcd.clear();
       lcd.setCursor(0,0); lcd.print(" AQUEC.  FILTRO");
       lcd.setCursor(1,1); lcd.print (bomba[AQC_bomba]);
@@ -317,11 +317,11 @@ void loop(){
         estado = BOMBAS;
       if (digitalRead(PB_3) == LOW)
         estado = BOMBAS;    
-      delay(200);
+      delay(100);
       break;
-      }
+      
     
-    case AJUSTES_AQC:{  //****************************Entrada de ajustes de aquecedor***********************************
+    case AJUSTES_AQC:  //****************************Entrada de ajustes de aquecedor***********************************
       lcd.clear();
       lcd.setCursor(0,0); lcd.print("AJUSTE AQUECEDOR");
       while (digitalRead(PB_1) && digitalRead(PB_2) && digitalRead(PB_3) == HIGH){
@@ -333,11 +333,11 @@ void loop(){
         estado = ADJ_T; 
       if (digitalRead(PB_3) == LOW)
         estado = HOME;   
-      delay(200);
+      delay(100);
       break;
-      } 
+       
 
-    case ADJ_T:{  //**********************Ajuste de Temperatura da piscina**********************
+    case ADJ_T:  //**********************Ajuste de Temperatura da piscina**********************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("TEMP PISCINA");
@@ -347,12 +347,10 @@ void loop(){
         estado = PISC_LG;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_AQC;    
-      delay(200);
+      delay(100);
       break;
-      }
-
-
-    case PISC_LG:{  //*****************Ajuste de Circulacao diaria LIGA **************************
+      
+    case PISC_LG:  //*****************Ajuste de Circulacao diaria LIGA **************************
       index = 2;
       lcd.clear();
       lcd.setCursor(0,0);
@@ -388,11 +386,10 @@ void loop(){
         estado = PISC_DL;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_AQC;    
-      delay(200);
+      delay(100);
       break;
-      }
-
-    case PISC_DL:{  //*****************Ajuste de Circulcao diaria desliga **************************
+      
+    case PISC_DL:  //*****************Ajuste de Circulcao diaria desliga **************************
       index = 3;
       lcd.clear();
       lcd.setCursor(0,0);
@@ -424,11 +421,10 @@ void loop(){
         estado = AJUSTES_AQC;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_AQC;    
-      delay(200);
+      delay(100);
       break;
-      }
-
-    case AJUSTES_FIL:{  //****************************Entrada de ajustes do filtro***********************************
+      
+    case AJUSTES_FIL:  //****************************Entrada de ajustes do filtro***********************************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("AJUSTE FILTRO");
@@ -441,11 +437,10 @@ void loop(){
         estado = PROG_1L; 
       if (digitalRead(PB_3) == LOW)
         estado = HOME; 
-      delay(200);
+      delay(100);
       break;
-      } 
-
-    case PROG_1L:{  //*****************Ajuste de PROG_1 LIGA **************************
+     
+    case PROG_1L:  //*****************Ajuste de PROG_1 LIGA **************************
       index = 0;
       lcd.clear();
       lcd.setCursor(0,0);
@@ -481,11 +476,10 @@ void loop(){
         estado = PROG_1D;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_FIL;    
-      delay(200);
+      delay(100);
       break;
-      }
-
-    case PROG_1D:{  //*****************Ajuste de PROG_1 DESL **************************
+      
+    case PROG_1D:  //*****************Ajuste de PROG_1 DESL **************************
       index = 1;
       lcd.clear();
       lcd.setCursor(0,0);
@@ -517,12 +511,10 @@ void loop(){
         estado = AJUSTES_FIL;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_FIL;    
-      delay(200);
+      delay(100);
       break;
-      }
       
-
-    case AJUSTES_DH:{  //*******************************Entrada de data e hora***************************************
+    case AJUSTES_DH:  //*******************************Entrada de data e hora***************************************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("AJUSTE DATA/HORA");
@@ -535,11 +527,10 @@ void loop(){
         estado = HORA; 
       if (digitalRead(PB_3) == LOW)
         estado = HOME; 
-      delay(200);
+      delay(100);
       break;
-      }  
-
-    case HORA:{  //*****************Ajuste de HORA **************************
+      
+    case HORA:  //*****************Ajuste de HORA **************************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("HORA");
@@ -567,11 +558,10 @@ void loop(){
         estado = DATA;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_DH;    
-      delay(200);
+      delay(100);
       break;
-      }
-
-    case DATA:{  //*****************Ajuste de DATA **************************
+      
+    case DATA:  //*****************Ajuste de DATA **************************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("DATA");
@@ -602,11 +592,10 @@ void loop(){
         estado = SEMAN;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_DH;    
-      delay(200);
+      delay(100);
       break;
-      } 
-
-    case SEMAN:{  //*****************Ajuste de DIA DA SEMANA **************************
+      
+    case SEMAN:  //*****************Ajuste de DIA DA SEMANA **************************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("DIA SEMANA");
@@ -626,12 +615,10 @@ void loop(){
         estado = AJUSTES_DH;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_DH;    
-      delay(200);
+      delay(100);
       break;
-      }   
-    
-
-    case AJUSTES_TEC:{  //*******************************Entrada de ajustes tecnicos***************************************
+      
+    case AJUSTES_TEC:  //*******************************Entrada de ajustes tecnicos***************************************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("CONFIG TECNICA");
@@ -644,11 +631,10 @@ void loop(){
         estado = DIFF_ON; 
       if (digitalRead(PB_3) == LOW)
         estado = HOME; 
-      delay(200);
+      delay(100);
       break;
-      }    
-
-    case DIFF_ON:{  //***************Ajuste de temperatura diferencial para ligar******************
+      
+    case DIFF_ON:  //***************Ajuste de temperatura diferencial para ligar******************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("DIFERENCIAL LIGA");
@@ -658,11 +644,10 @@ void loop(){
         estado = DIFF_OFF;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_TEC;    
-      delay(200);
+      delay(100);
       break;
-      }
-
-    case DIFF_OFF:{  //**************Ajuste de temperatura diferencial para desligar***************
+      
+    case DIFF_OFF:  //**************Ajuste de temperatura diferencial para desligar***************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("DIFERENCIAL DESL");
@@ -672,11 +657,10 @@ void loop(){
         estado = PSC_OS;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_TEC;    
-      delay(200);
+      delay(100);
       break;
-      }
-
-    case PSC_OS:{  //******************Ajuste de Offset sensor da piscina *************************
+      
+    case PSC_OS:  //******************Ajuste de Offset sensor da piscina *************************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("OFFSET SENS. PSC");
@@ -686,11 +670,10 @@ void loop(){
         estado = CLT_OS;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_TEC;    
-      delay(200);
+      delay(100);
       break;
-      }
-
-    case CLT_OS:{  //*******************Ajuste de Offset sensor do coletor solar ******************
+      
+    case CLT_OS:  //*******************Ajuste de Offset sensor do coletor solar ******************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("OFFSET SENS. CLT");
@@ -700,11 +683,10 @@ void loop(){
         estado = ANTI_ICE;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_TEC;    
-      delay(200);
+      delay(100);
       break;
-      }
-
-    case ANTI_ICE:{  //***************Ajuste de temperatura de anti congelamento******************
+      
+    case ANTI_ICE:  //***************Ajuste de temperatura de anti congelamento******************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("ANTICONGELAMENTO");
@@ -714,11 +696,10 @@ void loop(){
         estado = O_HEAT;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_TEC;    
-      delay(200);
+      delay(100);
       break;
-      }
-
-    case O_HEAT:{  //***************Ajuste de sobretemperatura dos coletores******************
+      
+    case O_HEAT:  //***************Ajuste de sobretemperatura dos coletores******************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("SOBRETEMPERATURA");
@@ -728,10 +709,9 @@ void loop(){
         estado = AJUSTES_TEC;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_TEC;    
-      delay(200);
+      delay(100);
       break;
-      }
-      
+            
     }
 }
 
@@ -740,9 +720,8 @@ void loop(){
 void atualiza_sistema(){
 
   int tempo_a = hora*60 + minuto;
-    
-  // ***************************** AQUECEDOR **********************************
   byte med;
+  
   v=0;
   for (med=0; med<50; med++){
     v  = v+(vcc*analogRead(PSC))/1023;
@@ -759,6 +738,49 @@ void atualiza_sistema(){
   rt = v*R/(vcc-v);
   cltTemp  = (beta / log(rt/rx)) - 273 + cltOS;
     
+  // ***************************** BLUETOOTH ***********************************
+
+  if (BT_Serial.available()){
+    switch(BT_Serial.read()){
+      case '1': //bomba aquecedor AUTO
+        AQC_bomba = 0;
+        EEPROM.put (50, AQC_bomba);
+        break;
+      
+      case '2': //bomba aquecedor LIGA
+        AQC_bomba = 1;
+        EEPROM.put (50, AQC_bomba);
+        break;
+      
+      case '3': //bomba aquecedor DESL
+        AQC_bomba = 2;
+        EEPROM.put (50, AQC_bomba);
+        break;
+      
+      case '4': //bomba filtro AUTO
+        FIL_bomba = 0;
+        EEPROM.put (52, AQC_bomba);
+        break;
+      
+      case '5': //bomba filtro LIGA
+        FIL_bomba = 1;
+        EEPROM.put (52, AQC_bomba);
+        break;
+      
+      case '6': //bomba filtro DESL
+        FIL_bomba = 2;
+        EEPROM.put (52, AQC_bomba);
+        break; 
+      
+      case '7': //imprime temperaturas
+        BT_Serial.print ("PSC T: "); BT_Serial.print(pscTemp, 1); BT_Serial.write(223); BT_Serial.println("C");
+        BT_Serial.print ("CLT T: "); BT_Serial.print(cltTemp, 1); BT_Serial.write(223); BT_Serial.println("C");
+        break;
+    }
+  }
+   
+  // ***************************** AQUECEDOR **********************************
+  
   if (AQC_bomba == 0){  
     if(cltTemp < DeICE || cltTemp > OverHeat) // verifica as condicoes excepcionais - congelamento e sobreaquecimento
       cond_t = HIGH;
@@ -773,7 +795,7 @@ void atualiza_sistema(){
     int tempo_d = hora_prog[3]*60 + min_prog[3];
     
     switch(dsemana){
-      case 1:{
+      case 1:
         if(dsem_prog[2] == 1 || dsem_prog[2] == 0 || dsem_prog[2] == 8){
           if (tempo_a >= tempo_l && tempo_a < tempo_d)
             cond_d = HIGH;
@@ -781,8 +803,8 @@ void atualiza_sistema(){
             cond_d = LOW; 
         }
        break;
-      }
-      case 2:{
+     
+      case 2:
         if(dsem_prog[2] == 2 || dsem_prog[2] == 0 || dsem_prog[2] == 9){
          if (tempo_a >= tempo_l && tempo_a < tempo_d)
             cond_d = HIGH;
@@ -790,8 +812,8 @@ void atualiza_sistema(){
             cond_d = LOW; 
         }
         break;
-      }
-      case 3:{
+      
+      case 3:
         if(dsem_prog[2] == 3 || dsem_prog[2] == 0 || dsem_prog[2] == 9){
           if (tempo_a >= tempo_l && tempo_a < tempo_d)
             cond_d = HIGH;
@@ -799,8 +821,8 @@ void atualiza_sistema(){
             cond_d = LOW; 
         }
         break;
-      }
-      case 4:{
+      
+      case 4:
         if(dsem_prog[2] == 4 || dsem_prog[2] == 0 || dsem_prog[2] == 9){
           if (tempo_a >= tempo_l && tempo_a < tempo_d)
             cond_d = HIGH;
@@ -808,8 +830,8 @@ void atualiza_sistema(){
             cond_d = LOW; 
         }
         break;
-      }
-      case 5:{
+      
+      case 5:
         if(dsem_prog[2] == 5 || dsem_prog[2] == 0 || dsem_prog[2] == 9){
           if (tempo_a >= tempo_l && tempo_a < tempo_d)
             cond_d = HIGH;
@@ -817,8 +839,8 @@ void atualiza_sistema(){
             cond_d = LOW; 
         }
         break;
-      }
-      case 6:{
+      
+      case 6:
         if(dsem_prog[2] == 6 || dsem_prog[2] == 0 || dsem_prog[2] == 9){
           if (tempo_a >= tempo_l && tempo_a < tempo_d)
             cond_d = HIGH;
@@ -826,8 +848,8 @@ void atualiza_sistema(){
             cond_d = LOW; 
         }
         break;
-      }
-      case 7:{
+      
+      case 7:
         if(dsem_prog[2] == 7 || dsem_prog[2] == 0 || dsem_prog[2] == 8){
           if (tempo_a >= tempo_l && tempo_a < tempo_d)
             cond_d = HIGH;
@@ -835,7 +857,7 @@ void atualiza_sistema(){
             cond_d = LOW; 
         }
         break;
-      }
+      
     }  
     if(cond_d == HIGH || cond_t == HIGH)
       digitalWrite(AQC, HIGH);
@@ -856,7 +878,7 @@ void atualiza_sistema(){
     int tempo_d = hora_prog[1]*60 + min_prog[1];
     
     switch(dsemana){
-      case 1:{
+      case 1:
         if(dsem_prog[0] == 1 || dsem_prog[0] == 0 || dsem_prog[0] == 8){
           if (tempo_a >= tempo_l && tempo_a < tempo_d)
             digitalWrite(FIL, HIGH);
@@ -864,8 +886,8 @@ void atualiza_sistema(){
             digitalWrite(FIL, LOW); 
         }
        break;
-      }
-      case 2:{
+      
+      case 2:
         if(dsem_prog[0] == 2 || dsem_prog[0] == 0 || dsem_prog[0] == 9){
          if (tempo_a >= tempo_l && tempo_a < tempo_d)
             digitalWrite(FIL, HIGH);
@@ -873,8 +895,8 @@ void atualiza_sistema(){
             digitalWrite(FIL, LOW); 
         }
         break;
-      }
-      case 3:{
+      
+      case 3:
         if(dsem_prog[0] == 3 || dsem_prog[0] == 0 || dsem_prog[0] == 9){
           if (tempo_a >= tempo_l && tempo_a < tempo_d)
             digitalWrite(FIL, HIGH);
@@ -882,8 +904,8 @@ void atualiza_sistema(){
             digitalWrite(FIL, LOW); 
         }
         break;
-      }
-      case 4:{
+      
+      case 4:
         if(dsem_prog[0] == 4 || dsem_prog[0] == 0 || dsem_prog[0] == 9){
           if (tempo_a >= tempo_l && tempo_a < tempo_d)
             digitalWrite(FIL, HIGH);
@@ -891,8 +913,8 @@ void atualiza_sistema(){
             digitalWrite(FIL, LOW); 
         }
         break;
-      }
-      case 5:{
+      
+      case 5:
         if(dsem_prog[0] == 5 || dsem_prog[0] == 0 || dsem_prog[0] == 9){
           if (tempo_a >= tempo_l && tempo_a < tempo_d)
             digitalWrite(FIL, HIGH);
@@ -900,8 +922,8 @@ void atualiza_sistema(){
             digitalWrite(FIL, LOW); 
         }
         break;
-      }
-      case 6:{
+      
+      case 6:
         if(dsem_prog[0] == 6 || dsem_prog[0] == 0 || dsem_prog[0] == 9){
           if (tempo_a >= tempo_l && tempo_a < tempo_d)
             digitalWrite(FIL, HIGH);
@@ -909,8 +931,8 @@ void atualiza_sistema(){
             digitalWrite(FIL, LOW); 
         }
         break;
-      }
-      case 7:{
+      
+      case 7:
         if(dsem_prog[0] == 7 || dsem_prog[0] == 0 || dsem_prog[0] == 8){
           if (tempo_a >= tempo_l && tempo_a < tempo_d)
             digitalWrite(FIL, HIGH);
@@ -918,7 +940,7 @@ void atualiza_sistema(){
             digitalWrite(FIL, LOW); 
         }
         break;
-      }
+      
      }
   }
   else{
