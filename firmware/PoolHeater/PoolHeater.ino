@@ -1,28 +1,33 @@
 /****************************************************/
-/* Controlador de terperatura e filtro para piscina */
+/* Controlador de temperatura e filtro para piscina */
 /* Autor: Mario Pin                                 */
-/* Vesão: 0.2.1 - 15/10/2021                        */
+/* Vesão: 0.2.2 - 21/10/2021                        */
 /****************************************************/
 
 #include <LiquidCrystal.h>
 #include <BigNums2x2.h>
 #include <EEPROM.h>
 #include <RTC.h>
+#include <SoftwareSerial.h>
 
 // define as portas a serem usadas pelas entradas e saidas de dados
-#define PB_1 4 //input Menu/Enter
-#define PB_2 3 //input NXT/+
-#define PB_3 2 //input ESC/-
-#define AQC 6 //output relé aquecedor
-#define FIL 5 //output relé filtro
-#define PSC A0 //analog sensor piscina
-#define CLT A1 //analog sensor coletor
-#define RS 8
-#define EN 9
-#define D4 13
-#define D5 12
-#define D6 11
-#define D7 10
+#define PB_1  4 //input Menu/Enter
+#define PB_2  3 //input NXT/+
+#define PB_3  2 //input ESC/-
+#define AQC   6  //output relé aquecedor
+#define FIL   5  //output relé filtro
+#define PSC   A0 //analog sensor piscina
+#define CLT   A1 //analog sensor coletor
+#define BT_RX 16 //bluetooth RX
+#define BT_TX 17 //bluetooth TX
+
+// Parametros do LCD
+#define RS 8   
+#define EN 9   
+#define D4 13  
+#define D5 12  
+#define D6 11  
+#define D7 10  
 
 // parametros do termistor
 const double beta = 3600.0;
@@ -36,15 +41,18 @@ const double R = 10000.0;
  
 LiquidCrystal lcd(RS, EN, D4, D5, D6, D7); //define pinos do LCD
 BigNums2x2 bigNuma(TREK); // inicializa as fontes grandes
-static DS1307 RTC1;
+static DS1307 RTC1;  //cria instancia RTC
+SoftwareSerial BT_Serial(BT_RX, BT_TX); //inicializa software serial
 
 //cria os possiveis estados do menu e inicializa em HOME
 enum Estados{HOME, GERAL, BOMBAS, AJUSTES_AQC, AJUSTES_FIL, PROG_1L, PROG_1D, PROG_2L, PROG_2D, AJUSTES_DH, HORA, DATA, SEMAN, 
               AJUSTES_TEC, ADJ_BOMBAS, ADJ_T, PISC_LG, PISC_DL, DIFF_ON, DIFF_OFF, PSC_OS, CLT_OS, ANTI_ICE, O_HEAT};
-Estados estado = HOME;
+Estados estado = HOME; //estado inicial
 
 //strings para os dias da semana
 String semana[]{"TOD", "DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB", "FDS", "UTL"}; 
+
+//strings para situacao das bombas
 String bomba[]{"AUTO", "LIGA", "DESL"};
 
 //cria variaveis globais
@@ -68,21 +76,22 @@ byte dsemana;
 byte dsem_prog[4];
 byte hora_prog[4];
 byte min_prog[4];
-byte AQC_bomba;
-byte FIL_bomba;
+byte AQC_bomba;  //Seletor 0=Auto, 1=Liga, 2=Desliga
+byte FIL_bomba;  //Seletor 0=Auto, 1=Liga, 2=Desliga
 int ano;
 byte index;
 bool semFlag = 0;
 bool cond_t = 0;
 bool cond_d = 0;
 
-void atualiza_sistema();        //funcao para atualizar os dados
-float configura (float param, float minimo, float maximo);  //funcao para entrada de configuracoes
+void atualiza_sistema();                                      //funcao para atualizar os dados
+float configura (float param, float minimo, float maximo);    //funcao para entrada de configuracoes
 int configuraDH (int param, int minimo, int maximo, int pos); //funcao para entrada de configuracoes de data
 
 void setup(){
-  lcd.begin(16,2); //inicializa display lcd
-  RTC1.begin();
+  lcd.begin(16,2); //inicializa LCD
+  RTC1.begin();    //inicializa RTC
+  BT_Serial.begin(9600);
   
   //*** USAR SOMENTE na montagem inicial ***
   /*
@@ -141,7 +150,7 @@ void setup(){
   //tela de inicializacao
   byte i;
   lcd.setCursor(0,0);
-  lcd.print("MPS01-v0.2.1");
+  lcd.print("MPS01-v0.2.2");
   lcd.setCursor(0,1);
   for (i=0; i<=19; i++){
     lcd.write(255);
@@ -730,6 +739,8 @@ void loop(){
 
 void atualiza_sistema(){
 
+  int tempo_a = hora*60 + minuto;
+    
   // ***************************** AQUECEDOR **********************************
   byte med;
   v=0;
@@ -752,16 +763,15 @@ void atualiza_sistema(){
     if(cltTemp < DeICE || cltTemp > OverHeat) // verifica as condicoes excepcionais - congelamento e sobreaquecimento
       cond_t = HIGH;
                                         
-    if(pscTemp < (tempSet - 0.5) && difTempON < (cltTemp - pscTemp)) // verifica o ajuste de temperatura para ligar
+    if(pscTemp < (tempSet - 0.5) && (cltTemp - pscTemp) > difTempON) // verifica o ajuste de temperatura para ligar
       cond_t = HIGH;
         
-    if(cltTemp > (DeICE + 2.0) && cltTemp < (OverHeat - 3.0) && (pscTemp > tempSet || difTempOFF > (cltTemp - pscTemp))) // verifica condições para desligar
+    if(cltTemp > (DeICE + 2.0) && cltTemp < (OverHeat - 3.0) && (pscTemp > tempSet || (cltTemp - pscTemp) < difTempOFF)) // verifica condições para desligar
       cond_t = LOW;
    
-    int tempo_a = hora*60 + minuto;
     int tempo_l = hora_prog[2]*60 + min_prog[2];
     int tempo_d = hora_prog[3]*60 + min_prog[3];
-  
+    
     switch(dsemana){
       case 1:{
         if(dsem_prog[2] == 1 || dsem_prog[2] == 0 || dsem_prog[2] == 8){
@@ -842,10 +852,9 @@ void atualiza_sistema(){
   // ***************************** FILTRO **************************************
   if(FIL_bomba == 0){
     
-    int tempo_a = hora*60 + minuto;
     int tempo_l = hora_prog[0]*60 + min_prog[0];
     int tempo_d = hora_prog[1]*60 + min_prog[1];
-  
+    
     switch(dsemana){
       case 1:{
         if(dsem_prog[0] == 1 || dsem_prog[0] == 0 || dsem_prog[0] == 8){
