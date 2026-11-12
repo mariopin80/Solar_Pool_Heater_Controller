@@ -1,17 +1,18 @@
 /****************************************************/
 /* Controlador de terperatura e filtro para piscina */
 /* Autor: Mario Pin                                 */
-/* Vesão: 0.0.3 - 27/05/2021                        */
+/* Vesão: 0.0.4 - 27/05/2021                        */
 /****************************************************/
 
 #include <LiquidCrystal.h>
 #include <BigNums2x2.h>
 #include <EEPROM.h>
+#include <RTC.h>
 
 // define as portas a serem usadas pelas entradas e saidas de dados
-#define PB1 2 //input Enter
-#define PB2 3 //input +
-#define PB3 4 //input -
+#define PB_1 2 //input Menu/Enter
+#define PB_2 3 //input NXT/+
+#define PB_3 4 //input ESC/-
 #define AQC 5 //output relé aquecedor
 #define FIL 6 //output relé filtro
 #define PSC A0 //analog sensor piscina
@@ -28,14 +29,15 @@ const double vcc = 5.0;
 const double R = 10000.0;
  
 LiquidCrystal lcd(7, 8, 9, 10, 11, 12); //define pinos do LCD (RS, E, D4, D5, D6, D7)
-BigNums2x2 bigNuma(NASA); // inicializa as fontes grandes
+BigNums2x2 bigNuma(TREK); // inicializa as fontes grandes
+static DS1307 RTC1;
 
 //cria os possiveis estados do menu e inicializa em HOME
-enum Estados{HOME, GERAL, AJUSTES_AQC, AJUSTES_FIL, AJUSTES_TEC, ADJ_T, DIFF_ON, DIFF_OFF, PSC_OS, CLT_OS};
+enum Estados{HOME, GERAL, AJUSTES_AQC, AJUSTES_FIL, AJUSTES_DH, DATA_DIA, DATA_MES, DATA_ANO, DATA_SEM, HORARIO_HR, HORARIO_MIN, AJUSTES_TEC, ADJ_T, DIFF_ON, DIFF_OFF, PSC_OS, CLT_OS};
 Estados estado = HOME;
 
 //strings para os dias da semana
-String semana[]{"DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB", "UTL", "FSM", "TDS"}; 
+String semana[]{"TDS", "DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"}; 
 
 //cria variaveis globais
 float pscTemp;
@@ -47,35 +49,33 @@ float difTempOFF;
 float DeICE = 4;
 float OverHeat = 50;
 float tempSet;
+byte segundo;
 byte minuto;
 byte hora;
 byte dia;
 byte mes;
 byte dsemana;
-int ano;
+byte ano;
 
-
-
-//funcao para atualizar os dados
-void atualiza_sistema();
+void atualiza_sistema();        //funcao para atualizar os dados
+float configura (float param, float minimo, float maximo);  //funcao para entrada de configuracoes
+byte configuraDH (byte param, byte minimo, byte maximo); //funcao para entrada de configuracoes de data
 
 void setup(){
   lcd.begin(16,2); //inicializa display lcd
-
+  RTC1.begin();
+  RTC1.startClock();
   //*** USAR SOMENTE na montagem inicial ***
   /*
-  tempSet = 25.0;
-  difTempON = 12.0;
-  difTempOFF = 5.0;
-  pscOS = 0.0;
-  cltOS = 0.0;
-  EEPROM.put(0, tempSet);
-  EEPROM.put(4, difTempON);
-  EEPROM.put(8, difTempOFF);
-  EEPROM.put(12, pscOS);
-  EEPROM.put(16, cltOS);  
+  EEPROM.put(0, 25.0);
+  EEPROM.put(4, 12.0);
+  EEPROM.put(8,  5.0);
+  EEPROM.put(12, 0.0);
+  EEPROM.put(16, 0.0);  
+  RTC1.setDate(27,05,21);
+  RTC1.setTime(14,56,00);
+  RTC1.setWeek(1);
   */
-
   
   //busca valores de parametros na EEPROM
   EEPROM.get(0, tempSet);
@@ -84,18 +84,17 @@ void setup(){
   EEPROM.get(12, pscOS);
   EEPROM.get(16, cltOS);
  
-
   //inicializa entradas e saidas
-  pinMode(PB1, INPUT_PULLUP);
-  pinMode(PB2, INPUT_PULLUP);
-  pinMode(PB3, INPUT_PULLUP);
+  pinMode(PB_1, INPUT_PULLUP);
+  pinMode(PB_2, INPUT_PULLUP);
+  pinMode(PB_3, INPUT_PULLUP);
   pinMode(AQC, OUTPUT);
   pinMode(FIL, OUTPUT);  
 
   //tela de inicializacao
   byte i;
   lcd.setCursor(0,0);
-  lcd.print("MPS01 V 0.0.2");
+  lcd.print("MPS01 - v0.0.4");
   lcd.setCursor(0,1);
   for (i=0; i<=19; i++){
     lcd.write(255);
@@ -110,27 +109,33 @@ void loop(){
       lcd.clear();
       lcd.setCursor(7,1);
       lcd.write(223); lcd.print("C");
-      while (digitalRead(PB1) && digitalRead(PB2) == HIGH){
-        
+      while (digitalRead(PB_1) && digitalRead(PB_2) == HIGH){
         atualiza_sistema();
-        
         bigNuma.print(pscTemp, 2, 0, 0); 
         lcd.setCursor(5,1);
         int decimal = pscTemp * 100; decimal = decimal % 100; decimal = decimal/10;
         lcd.print("."); lcd.print(decimal);
-
-        lcd.setCursor(11, 0);
-        lcd.print(hora); lcd.print(":"); lcd.print(minuto);
-
-        lcd.setCursor(11, 1);
+        if (hora < 10){
+           lcd.setCursor(11, 0);
+           lcd.print (" ");
+        }
+        else
+           lcd.setCursor(11, 0); 
+        lcd.print(hora);
+        if (segundo % 2 == 0)
+           lcd.print(":"); 
+        else
+           lcd.print(" ");   
+        if (minuto < 10)
+           lcd.print("0");
+        lcd.print(minuto);
+        lcd.setCursor(13, 1);
         lcd.print(semana[dsemana]);
         delay (100);
          }
-
-      //saida da pagina HOME      
-      if (digitalRead(PB2) == LOW)
+       if (digitalRead(PB_2) == LOW)
         estado = GERAL;
-      if (digitalRead(PB1) == LOW)
+      if (digitalRead(PB_1) == LOW)
         estado = AJUSTES_AQC;  
       delay(300);
       break;
@@ -138,10 +143,8 @@ void loop(){
       
     case GERAL:{  //****************************************************GERAL**************************************
       lcd.clear();
-      while (digitalRead(PB2) && digitalRead(PB3) == HIGH){
-
+      while (digitalRead(PB_2) && digitalRead(PB_3) == HIGH){
         atualiza_sistema();
-        
         lcd.setCursor(0,0);
         lcd.print(semana[dsemana]); 
         lcd.setCursor(6, 0);
@@ -150,8 +153,22 @@ void loop(){
         else
           lcd.print("PSC ");
         lcd.print(pscTemp, 1); lcd.write(223); lcd.print("C");
-        lcd.setCursor(0,1);
-        lcd.print(hora); lcd.print(":"); lcd.print(minuto);
+        if (hora < 10){
+           lcd.setCursor(0, 0);
+           lcd.print(" ");
+        }
+        else
+           lcd.setCursor(0, 0); 
+        lcd.print(hora);
+        if (segundo % 2 == 0)
+           lcd.print(":"); 
+        else
+           lcd.print(" ");   
+        if (minuto < 10)
+           lcd.print("0");
+        lcd.print(minuto);
+        lcd.setCursor(0, 1);
+        lcd.print(semana[dsemana]);
         lcd.setCursor(6, 10);
         if (cltTemp < 10)
           lcd.print("CLT  ");
@@ -160,7 +177,6 @@ void loop(){
         lcd.print(cltTemp, 1); lcd.write(223); lcd.print("C");
         delay(200);
         }
-
       estado = HOME;
       delay(200);
       break;
@@ -170,59 +186,30 @@ void loop(){
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("CONFIG AQUECEDOR");
-      while (digitalRead(PB1) && digitalRead(PB2) && digitalRead(PB3) == HIGH){
-
+      while (digitalRead(PB_1) && digitalRead(PB_2) && digitalRead(PB_3) == HIGH){
         atualiza_sistema();
-        
         }
-      if (digitalRead(PB1) == LOW)
+      if (digitalRead(PB_1) == LOW)
         estado = AJUSTES_FIL;
-      if (digitalRead(PB2) == LOW)
+      if (digitalRead(PB_2) == LOW)
         estado = ADJ_T; 
-      if (digitalRead(PB3) == LOW)
+      if (digitalRead(PB_3) == LOW)
         estado = HOME;   
       delay(200);
       break;
       } 
 
-    case ADJ_T:{  //******************************Ajuste de Temperatura da piscina********************************
+    case ADJ_T:{  //**********************Ajuste de Temperatura da piscina**********************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("TEMP PISCINA");
-      while (digitalRead(PB2) && digitalRead(PB3) == HIGH){
-        atualiza_sistema();
-        lcd.setCursor(1,1);
-        lcd.print(tempSet, 1); lcd.write(223); lcd.print("C");
-        if (digitalRead(PB1) == LOW){
-          lcd.setCursor(0, 1);
-          lcd.write(">");
-          delay(200);
-          while (digitalRead(PB1) == HIGH){
-            atualiza_sistema();
-            delay(100);
-            if (digitalRead (PB2) == LOW){
-              tempSet = tempSet + 0.1;
-              lcd.setCursor(1,1);
-              lcd.print(tempSet, 1); lcd.write(223); lcd.print("C  ");
-            }
-            if (digitalRead (PB3) == LOW){
-              tempSet = tempSet - 0.1;
-              lcd.setCursor(1,1);
-              lcd.print(tempSet, 1); lcd.write(223); lcd.print("C  ");
-            }
-          }
-          lcd.setCursor(0,1);
-          lcd.print(" ");
-         }
-        delay(200);
-        }
+      tempSet = configura(tempSet, 10, 40);
       EEPROM.put(0, tempSet);
-      if (digitalRead(PB2) == LOW)
+      if (digitalRead(PB_2) == LOW)
         estado = AJUSTES_AQC;
-      if (digitalRead(PB3) == LOW)
+      if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_AQC;    
       delay(300);
-
       break;
       }
 
@@ -231,208 +218,192 @@ void loop(){
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("CONFIG FILTRO");
-      while (digitalRead(PB1) && digitalRead(PB2) && digitalRead(PB3) == HIGH){
-
+      while (digitalRead(PB_1) && digitalRead(PB_2) && digitalRead(PB_3) == HIGH){
         atualiza_sistema();
-        
         }
-      if (digitalRead(PB1) == LOW)
-        estado = AJUSTES_TEC;
-      if (digitalRead(PB2) == LOW)
-        estado = ADJ_T; 
-      if (digitalRead(PB3) == LOW)
+      if (digitalRead(PB_1) == LOW)
+        estado = AJUSTES_DH;
+      if (digitalRead(PB_2) == LOW)
+        estado = AJUSTES_FIL; 
+      if (digitalRead(PB_3) == LOW)
         estado = HOME; 
       delay(200);
       break;
       }  
 
-    case AJUSTES_TEC:{  //****************************Entrada de ajustes tecnicos***********************************
+    case AJUSTES_DH:{  //*******************************Entrada de data e hora***************************************
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("CONFIG DATA/HORA");
+      while (digitalRead(PB_1) && digitalRead(PB_2) && digitalRead(PB_3) == HIGH){
+        atualiza_sistema();
+        }
+      if (digitalRead(PB_1) == LOW)
+        estado = AJUSTES_TEC;
+      if (digitalRead(PB_2) == LOW)
+        estado = HORARIO_HR; 
+      if (digitalRead(PB_3) == LOW)
+        estado = HOME; 
+      delay(200);
+      break;
+      }  
+
+    case HORARIO_HR:{  //*****************Ajuste de HORARIO - HORA **************************
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("HORARIO - HORA");
+      hora = configuraDH(hora, 0, 23);
+      RTC1.setHours(hora);
+      if (digitalRead(PB_2) == LOW)
+        estado = HORARIO_MIN;
+      if (digitalRead(PB_3) == LOW)
+        estado = AJUSTES_DH;    
+      delay(300);
+      break;
+      }
+
+    case HORARIO_MIN:{  //***************Ajuste de HORARIO - MINUTO *************************
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("HORARIO - MINUTO");
+      minuto = configuraDH(minuto, 0, 59);
+      RTC1.setMinutes(minuto);
+      if (digitalRead(PB_2) == LOW)
+        estado = DATA_SEM;
+      if (digitalRead(PB_3) == LOW)
+        estado = AJUSTES_DH;    
+      delay(300);
+      break;
+      }
+
+    case DATA_SEM:{  //*******************Ajuste de DATA - Dia da Semana ********************
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("DIA DA SEMANA");
+      dsemana = configuraDH(dsemana, 1, 7);
+      RTC1.setWeek(dsemana);
+      if (digitalRead(PB_2) == LOW)
+        estado = DATA_DIA;
+      if (digitalRead(PB_3) == LOW)
+        estado = AJUSTES_DH;    
+      delay(300);
+      break;
+      }
+
+    case DATA_DIA:{  //*********************Ajuste de DATA - Dia do mes *********************
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("DATA - DIA");
+      dia = configuraDH(dia, 1, 31);
+      RTC1.setDay(dia);
+      if (digitalRead(PB_2) == LOW)
+        estado = DATA_MES;
+      if (digitalRead(PB_3) == LOW)
+        estado = AJUSTES_DH;    
+      delay(300);
+      break;
+      }
+    case DATA_MES:{  //***********************Ajuste de DATA - Mes **************************
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("DATA - MES");
+      mes = configuraDH(mes, 1, 12);
+      RTC1.setMonth(mes);
+      if (digitalRead(PB_2) == LOW)
+        estado = DATA_ANO;
+      if (digitalRead(PB_3) == LOW)
+        estado = AJUSTES_DH;    
+      delay(300);
+      break;
+      }
+
+    case DATA_ANO:{  //***********************Ajuste de DATA - ANO **************************
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("DATA - ANO");
+      ano = configuraDH(ano, 00, 99);
+      RTC1.setYear(ano);
+      if (digitalRead(PB_2) == LOW)
+        estado = AJUSTES_DH;
+      if (digitalRead(PB_3) == LOW)
+        estado = AJUSTES_DH;    
+      delay(300);
+      break;
+      }  
+
+
+    case AJUSTES_TEC:{  //*******************************Entrada de ajustes tecnicos***************************************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("CONFIG TECNICA");
-      while (digitalRead(PB1) && digitalRead(PB2) && digitalRead(PB3) == HIGH){
-
+      while (digitalRead(PB_1) && digitalRead(PB_2) && digitalRead(PB_3) == HIGH){
         atualiza_sistema();
-        
         }
-      if (digitalRead(PB1) == LOW)
+      if (digitalRead(PB_1) == LOW)
         estado = HOME;
-      if (digitalRead(PB2) == LOW)
+      if (digitalRead(PB_2) == LOW)
         estado = DIFF_ON; 
-      if (digitalRead(PB3) == LOW)
+      if (digitalRead(PB_3) == LOW)
         estado = HOME; 
       delay(200);
       break;
       }    
 
-    
-
-    case DIFF_ON:{  //***********************Ajuste de temperatura diferencial para ligar**************************
+    case DIFF_ON:{  //***************Ajuste de temperatura diferencial para ligar******************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("DIFERENCIAL LIGA");
-      while (digitalRead(PB2) && digitalRead(PB3) == HIGH){
-        atualiza_sistema();
-        lcd.setCursor(1,1);
-        lcd.print(difTempON, 1); lcd.write(223); lcd.print("C");
-        if (digitalRead(PB1) == LOW){
-          lcd.setCursor(0, 1);
-          lcd.write(">");
-          delay(200);
-          while (digitalRead(PB1) == HIGH){
-            atualiza_sistema();
-            delay(100);
-            if (digitalRead (PB2) == LOW){
-              difTempON = difTempON + 0.1;
-              lcd.setCursor(1,1);
-              lcd.print(difTempON, 1); lcd.write(223); lcd.print("C  ");
-            }
-            if (digitalRead (PB3) == LOW){
-              difTempON = difTempON - 0.1;
-              lcd.setCursor(1,1);
-              lcd.print(difTempON, 1); lcd.write(223); lcd.print("C  ");
-            }
-          }
-          lcd.setCursor(0,1);
-          lcd.print(" ");
-         }
-        delay(200);
-        }
+      difTempON = configura(difTempON, 2, 25);
       EEPROM.put(4, difTempON);
-      if (digitalRead(PB2) == LOW)
+      if (digitalRead(PB_2) == LOW)
         estado = DIFF_OFF;
-      if (digitalRead(PB3) == LOW)
+      if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_TEC;    
       delay(300);
-
       break;
       }
 
-    case DIFF_OFF:{  //***********************Ajuste de temperatura diferencial para desligar*************************
+    case DIFF_OFF:{  //**************Ajuste de temperatura diferencial para desligar***************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("DIFERENCIAL DESL");
-      while (digitalRead(PB2) && digitalRead(PB3) == HIGH){
-        atualiza_sistema();
-        lcd.setCursor(1,1);
-        lcd.print(difTempOFF, 1); lcd.write(223); lcd.print("C");
-        if (digitalRead(PB1) == LOW){
-          lcd.setCursor(0, 1);
-          lcd.write(">");
-          delay(200);
-          while (digitalRead(PB1) == HIGH){
-            atualiza_sistema();
-            delay(100);
-            if (digitalRead (PB2) == LOW){
-              difTempOFF = difTempOFF + 0.1;
-              lcd.setCursor(1,1);
-              lcd.print(difTempOFF, 1); lcd.write(223); lcd.print("C  ");
-            }
-            if (digitalRead (PB3) == LOW){
-              difTempOFF = difTempOFF - 0.1;
-              lcd.setCursor(1,1);
-              lcd.print(difTempOFF, 1); lcd.write(223); lcd.print("C  ");
-            }
-          }
-          lcd.setCursor(0,1);
-          lcd.print(" ");
-         }
-        delay(200);
-        }
+      difTempOFF = configura(difTempOFF, 2, 25);
       EEPROM.put(8, difTempOFF);
-      if (digitalRead(PB2) == LOW)
+      if (digitalRead(PB_2) == LOW)
         estado = PSC_OS;
-      if (digitalRead(PB3) == LOW)
+      if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_TEC;    
       delay(300);
-
       break;
       }
 
-    case PSC_OS:{  //***********************Ajuste de Offset sensor da piscina *************************
+    case PSC_OS:{  //******************Ajuste de Offset sensor da piscina *************************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("OFFSET SENS. PSC");
-      while (digitalRead(PB2) && digitalRead(PB3) == HIGH){
-        atualiza_sistema();
-        lcd.setCursor(1,1);
-        lcd.print(pscOS, 1); lcd.write(223); lcd.print("C");
-        if (digitalRead(PB1) == LOW){
-          lcd.setCursor(0, 1);
-          lcd.write(">");
-          delay(200);
-          while (digitalRead(PB1) == HIGH){
-            atualiza_sistema();
-            delay(100);
-            if (digitalRead (PB2) == LOW){
-              pscOS = pscOS + 0.1;
-              lcd.setCursor(1,1);
-              lcd.print(pscOS, 1); lcd.write(223); lcd.print("C  ");
-            }
-            if (digitalRead (PB3) == LOW){
-              pscOS = pscOS - 0.1;
-              lcd.setCursor(1,1);
-              lcd.print(pscOS, 1); lcd.write(223); lcd.print("C  ");
-            }
-          }
-          lcd.setCursor(0,1);
-          lcd.print(" ");
-         }
-        delay(200);
-        }
+      pscOS = configura(pscOS, -5.0, 5.0);
       EEPROM.put(12, pscOS);
-      if (digitalRead(PB2) == LOW)
+      if (digitalRead(PB_2) == LOW)
         estado = CLT_OS;
-      if (digitalRead(PB3) == LOW)
+      if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_TEC;    
       delay(300);
-
       break;
       }
 
-    case CLT_OS:{  //***********************Ajuste de Offset sensor do coletor solar *************************
+    case CLT_OS:{  //*******************Ajuste de Offset sensor do coletor solar ******************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("OFFSET SENS. CLT");
-      while (digitalRead(PB2) && digitalRead(PB3) == HIGH){
-        atualiza_sistema();
-        lcd.setCursor(1,1);
-        lcd.print(cltOS, 1); lcd.write(223); lcd.print("C");
-        if (digitalRead(PB1) == LOW){
-          lcd.setCursor(0, 1);
-          lcd.write(">");
-          delay(200);
-          while (digitalRead(PB1) == HIGH){
-            atualiza_sistema();
-            delay(100);
-            if (digitalRead (PB2) == LOW){
-              cltOS = cltOS + 0.1;
-              lcd.setCursor(1,1);
-              lcd.print(cltOS, 1); lcd.write(223); lcd.print("C  ");
-            }
-            if (digitalRead (PB3) == LOW){
-              cltOS = cltOS - 0.1;
-              lcd.setCursor(1,1);
-              lcd.print(cltOS, 1); lcd.write(223); lcd.print("C  ");
-            }
-          }
-          lcd.setCursor(0,1);
-          lcd.print(" ");
-         }
-        delay(200);
-        }
+      cltOS = configura(cltOS, -5.0, 5.0);
       EEPROM.put(16, cltOS);
-      if (digitalRead(PB2) == LOW)
+      if (digitalRead(PB_2) == LOW)
         estado = AJUSTES_TEC;
-      if (digitalRead(PB3) == LOW)
+      if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_TEC;    
       delay(300);
-
       break;
       }
-
-
-        
     }
 }
 
@@ -449,13 +420,106 @@ void atualiza_sistema(){
   if(cltTemp < DeICE || cltTemp > OverHeat) // verifica as condicoes excepcionais - congelamento e sobreaquecimento
     digitalWrite(AQC, HIGH);
     else{                                   // verifica o ajuste de temperatura
-      if(pscTemp < (tempSet-0.3) && difTempON < (cltTemp - pscTemp))
+      if(pscTemp < (tempSet-0.5) && difTempON < (cltTemp - pscTemp))
         digitalWrite(AQC, HIGH);
       if(pscTemp > tempSet || difTempOFF > (cltTemp - pscTemp))
         digitalWrite(AQC, LOW);
     }
   
-  hora = 11;
-  minuto = 25;
-  dsemana = 1;
+  hora    = RTC1.getHours();
+  minuto  = RTC1.getMinutes();
+  segundo = RTC1.getSeconds();
+  dsemana = RTC1.getWeek();
+}
+
+float configura (float param, float minimo, float maximo){
+  lcd.setCursor(1,1);
+  lcd.print(param, 1); lcd.write(0xDF); lcd.print("C");
+  while (digitalRead(PB_2) && digitalRead(PB_3) == HIGH){
+        atualiza_sistema();
+        if (digitalRead(PB_1) == LOW){
+          lcd.setCursor(0, 1);
+          lcd.write(0x3E);
+          delay(200);
+          while (digitalRead(PB_1) == HIGH){
+            atualiza_sistema();
+            delay(100);
+            if (digitalRead (PB_2) == LOW){
+              if (param < maximo){
+                param = param + 0.1;
+                lcd.setCursor(1,1);
+                lcd.print(param, 1); lcd.write(0xDF); lcd.print("C  ");
+              }
+            }
+            if (digitalRead (PB_3) == LOW){
+              if (param > minimo){
+                param = param - 0.1;
+                lcd.setCursor(1,1);
+                lcd.print(param, 1); lcd.write(0xDF); lcd.print("C  ");
+              }
+            }
+          }
+          lcd.setCursor(0,1);
+          lcd.print(" ");
+         }
+        delay(200);
+        
+        }
+  return (param);
+}
+
+byte configuraDH (byte param, byte minimo, byte maximo){
+  lcd.setCursor(1,1);
+  if(estado == DATA_SEM)
+   lcd.print(semana[param]);
+  else{
+    if(param < 10)
+      lcd.print("0");
+    lcd.print(param);
+    }
+   
+  while (digitalRead(PB_2) && digitalRead(PB_3) == HIGH){
+        atualiza_sistema();
+        if (digitalRead(PB_1) == LOW){
+          lcd.setCursor(0, 1);
+          lcd.write(">");
+          delay(200);
+          while (digitalRead(PB_1) == HIGH){
+            atualiza_sistema();
+            delay(100);
+            if (digitalRead (PB_2) == LOW){
+              if (param < maximo){
+                param ++;
+                lcd.setCursor(1,1);
+                if(estado == DATA_SEM)
+                   lcd.print(semana[param]);
+                else{
+                   if(param < 10)
+                      lcd.print("0");
+                   lcd.print(param);
+                 }
+              }
+            }
+            if (digitalRead (PB_3) == LOW){
+              if (param > minimo){
+                param --;
+                lcd.setCursor(1,1);
+                if(estado == DATA_SEM)
+                  lcd.print(semana[param]);
+                else{
+                  if(param < 10)
+                  lcd.print("0");
+                lcd.print(param);
+                }
+              }
+            }
+          }
+          lcd.setCursor(0,1);
+          lcd.print(" ");
+          
+         }
+        delay(200);
+        
+        }
+  return (param);
 }
