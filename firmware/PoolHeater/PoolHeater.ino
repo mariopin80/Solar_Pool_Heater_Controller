@@ -1,7 +1,7 @@
 /****************************************************/
 /* Controlador de terperatura e filtro para piscina */
 /* Autor: Mario Pin                                 */
-/* Vesão: 0.0.5 - 28/05/2021                        */
+/* Vesão: 0.0.6 - 21/06/2021                        */
 /****************************************************/
 
 #include <LiquidCrystal.h>
@@ -10,11 +10,11 @@
 #include <RTC.h>
 
 // define as portas a serem usadas pelas entradas e saidas de dados
-#define PB_1 2 //input Menu/Enter
+#define PB_1 4 //input Menu/Enter
 #define PB_2 3 //input NXT/+
-#define PB_3 4 //input ESC/-
-#define AQC 5 //output relé aquecedor
-#define FIL 6 //output relé filtro
+#define PB_3 2 //input ESC/-
+#define AQC 6 //output relé aquecedor
+#define FIL 5 //output relé filtro
 #define PSC A0 //analog sensor piscina
 #define CLT A1 //analog sensor coletor
 
@@ -28,8 +28,8 @@ const float rx = r0 * exp(-beta/t0);
 const double vcc = 5.0;
 const double R = 10000.0;
  
-LiquidCrystal lcd(7, 8, 9, 10, 11, 12); //define pinos do LCD (RS, E, D4, D5, D6, D7)
-BigNums2x2 bigNuma(TREK); // inicializa as fontes grandes
+LiquidCrystal lcd(8, 9, 13, 12, 11, 10); //define pinos do LCD (RS, E, D4, D5, D6, D7)
+BigNums2x2 bigNuma(NASA); // inicializa as fontes grandes
 static DS1307 RTC1;
 
 //cria os possiveis estados do menu e inicializa em HOME
@@ -47,8 +47,10 @@ float cltOS;
 float difTempON;
 float difTempOFF;
 float DeICE = 4;
-float OverHeat = 50;
+float OverHeat = 60;
 float tempSet;
+float v;
+float rt;
 byte segundo;
 byte minuto;
 byte hora;
@@ -83,11 +85,11 @@ void setup(){
   EEPROM.put(22, 0x00);
   EEPROM.put(32, 0x00);
   EEPROM.put(42, 0x00);   
-  RTC1.setDate(27,05,21);
-  RTC1.setTime(14,56,00);
+  RTC1.setDate(01,01,00);
+  RTC1.setTime(00,00,00);
   RTC1.setWeek(1);
   RTC1.startClock();
-  */
+ */
 
   
   
@@ -102,7 +104,7 @@ void setup(){
   EEPROM.get(40, min_prog[0]);
   EEPROM.get(22, dsem_prog[1]);
   EEPROM.get(32, hora_prog[1]);
-  EEPROM.get(42, min_prog[1]);       
+  EEPROM.get(42, min_prog[1]);  
 
   //inicializa entradas e saidas
   pinMode(PB_1, INPUT_PULLUP);
@@ -114,7 +116,7 @@ void setup(){
   //tela de inicializacao
   byte i;
   lcd.setCursor(0,0);
-  lcd.print("MPS01 - v0.0.5");
+  lcd.print("MPS01 - v0.0.6");
   lcd.setCursor(0,1);
   for (i=0; i<=19; i++){
     lcd.write(255);
@@ -205,7 +207,7 @@ void loop(){
     case AJUSTES_AQC:{  //****************************Entrada de ajustes de aquecedor***********************************
       lcd.clear();
       lcd.setCursor(0,0);
-      lcd.print("CONFIG AQUECEDOR");
+      lcd.print("AJUSTE AQUECEDOR");
       while (digitalRead(PB_1) && digitalRead(PB_2) && digitalRead(PB_3) == HIGH){
         atualiza_sistema();
         }
@@ -237,7 +239,7 @@ void loop(){
     case AJUSTES_FIL:{  //****************************Entrada de ajustes do filtro***********************************
       lcd.clear();
       lcd.setCursor(0,0);
-      lcd.print("CONFIG FILTRO");
+      lcd.print("AJUSTE FILTRO");
       while (digitalRead(PB_1) && digitalRead(PB_2) && digitalRead(PB_3) == HIGH){
         atualiza_sistema();
         }
@@ -331,7 +333,7 @@ void loop(){
     case AJUSTES_DH:{  //*******************************Entrada de data e hora***************************************
       lcd.clear();
       lcd.setCursor(0,0);
-      lcd.print("CONFIG DATA/HORA");
+      lcd.print("AJUSTE DATA/HORA");
       while (digitalRead(PB_1) && digitalRead(PB_2) && digitalRead(PB_3) == HIGH){
         atualiza_sistema();
         }
@@ -515,12 +517,15 @@ void loop(){
 //******************************************Funcoes auxiliares***************************************
 void atualiza_sistema(){
 
-  float v  = (vcc*analogRead(PSC))/1023;
-  float rt = (vcc*R)/v - R;
+  // ***************************** AQUECEDOR **********************************
+  v  = (vcc*analogRead(PSC))/1023;
+  rt = v*R/(vcc-v);
   pscTemp  = (beta / log(rt/rx)) - 273 + pscOS;
+
+  v  = (vcc*analogRead(CLT))/1023;
+  rt = v*R/(vcc-v);
+  cltTemp  = (beta / log(rt/rx)) - 273 + cltOS;
     
-  cltTemp  = 0.05376 * analogRead(CLT) + cltOS;
-  
   if(cltTemp < DeICE || cltTemp > OverHeat) // verifica as condicoes excepcionais - congelamento e sobreaquecimento
     digitalWrite(AQC, HIGH);
     else{                                   // verifica o ajuste de temperatura
@@ -529,7 +534,79 @@ void atualiza_sistema(){
       if(pscTemp > tempSet || difTempOFF > (cltTemp - pscTemp))
         digitalWrite(AQC, LOW);
     }
+
+  // ***************************** FILTRO **************************************
+  int tempo_a = hora*60 + minuto;
+  int tempo_l = hora_prog[0]*60 + min_prog[0];
+  int tempo_d = hora_prog[1]*60 + min_prog[1];
   
+  switch(dsemana){
+    case 1:{
+      if(dsem_prog[0] == 1 || dsem_prog[0] == 0 || dsem_prog[0] == 8){
+        if (tempo_a >= tempo_l && tempo_a < tempo_d)
+          digitalWrite(FIL, HIGH);
+          else
+          digitalWrite(FIL, LOW); 
+      }
+      break;
+    }
+    case 2:{
+      if(dsem_prog[0] == 2 || dsem_prog[0] == 0 || dsem_prog[0] == 9){
+        if (tempo_a >= tempo_l && tempo_a < tempo_d)
+          digitalWrite(FIL, HIGH);
+          else
+          digitalWrite(FIL, LOW); 
+      }
+      break;
+    }
+    case 3:{
+      if(dsem_prog[0] == 3 || dsem_prog[0] == 0 || dsem_prog[0] == 9){
+        if (tempo_a >= tempo_l && tempo_a < tempo_d)
+          digitalWrite(FIL, HIGH);
+          else
+          digitalWrite(FIL, LOW); 
+      }
+      break;
+    }
+    case 4:{
+      if(dsem_prog[0] == 4 || dsem_prog[0] == 0 || dsem_prog[0] == 9){
+        if (tempo_a >= tempo_l && tempo_a < tempo_d)
+          digitalWrite(FIL, HIGH);
+          else
+          digitalWrite(FIL, LOW); 
+      }
+      break;
+    }
+    case 5:{
+      if(dsem_prog[0] == 5 || dsem_prog[0] == 0 || dsem_prog[0] == 9){
+        if (tempo_a >= tempo_l && tempo_a < tempo_d)
+          digitalWrite(FIL, HIGH);
+          else
+          digitalWrite(FIL, LOW); 
+      }
+      break;
+    }
+    case 6:{
+      if(dsem_prog[0] == 6 || dsem_prog[0] == 0 || dsem_prog[0] == 9){
+        if (tempo_a >= tempo_l && tempo_a < tempo_d)
+          digitalWrite(FIL, HIGH);
+          else
+          digitalWrite(FIL, LOW); 
+      }
+      break;
+    }
+    case 7:{
+      if(dsem_prog[0] == 7 || dsem_prog[0] == 0 || dsem_prog[0] == 8){
+        if (tempo_a >= tempo_l && tempo_a < tempo_d)
+          digitalWrite(FIL, HIGH);
+          else
+          digitalWrite(FIL, LOW); 
+      }
+      break;
+    }
+  }
+
+  //************ ATUALIZA HORA E DATA ***************     
   hora    = RTC1.getHours();
   minuto  = RTC1.getMinutes();
   segundo = RTC1.getSeconds();
@@ -537,6 +614,7 @@ void atualiza_sistema(){
   dia     = RTC1.getDay();
   mes     = RTC1.getMonth();
   ano     = RTC1.getYear();
+  
 }
 
 float configura (float param, float minimo, float maximo){
