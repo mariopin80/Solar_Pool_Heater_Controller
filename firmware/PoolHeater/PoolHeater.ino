@@ -1,34 +1,41 @@
 /****************************************************/
 /* Controlador de terperatura e filtro para piscina */
 /* Autor: Mario Pin                                 */
-/* Vesão: 0.0.1 - 13/05/2021                        */
+/* Vesão: 0.0.2 - 25/05/2021                        */
 /****************************************************/
 
 #include <LiquidCrystal.h>
 #include <BigNums2x2.h>
 #include <EEPROM.h>
 
-
-
 // define as portas a serem usadas pelas entradas e saidas de dados
-#define PB1 2 //input Menu/Enter
-#define PB2 3 //input NXT/+
-#define PB3 4 //input ESC/-
+#define PB1 2 //input Enter
+#define PB2 3 //input +
+#define PB3 4 //input -
 #define AQC 5 //output relé aquecedor
 #define FIL 6 //output relé filtro
 #define PSC A0 //analog sensor piscina
 #define CLT A1 //analog sensor coletor
 
+// parametros do termistor
+const double beta = 3600.0;
+const double r0 = 10000.0;
+const double t0 = 273.15 + 25;
+const float rx = r0 * exp(-beta/t0);
+
+// parametros do circuito de medicao de temperatura
+const double vcc = 5.0;
+const double R = 10000.0;
+ 
 LiquidCrystal lcd(7, 8, 9, 10, 11, 12); //define pinos do LCD (RS, E, D4, D5, D6, D7)
-BigNums2x2 bigNuma(NASA);
-static DS1307 RTC1;
+BigNums2x2 bigNuma(NASA); // inicializa as fontes grandes
 
 //cria os possiveis estados do menu e inicializa em HOME
-enum Estados{HOME, GERAL, AJUSTES_AQC,AJUSTES_FIL, ADJ_T, DIFF_ON, DIFF_OFF};
+enum Estados{HOME, GERAL, AJUSTES_AQC, AJUSTES_FIL, AJUSTES_TEC, ADJ_T, DIFF_ON, DIFF_OFF};
 Estados estado = HOME;
 
 //strings para os dias da semana
-String semana[]{"DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"}; 
+String semana[]{"DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB", "UTL", "FSM", "TDS"}; 
 
 //cria variaveis globais
 float pscTemp;
@@ -37,6 +44,8 @@ float pscOS;
 float cltOS;
 float difTempON;
 float difTempOFF;
+float DeICE = 4;
+float OverHeat = 50;
 float tempSet;
 byte minuto;
 byte hora;
@@ -52,8 +61,6 @@ void atualiza_sistema();
 
 void setup(){
   lcd.begin(16,2); //inicializa display lcd
-  RTC1.begin();
-  RTC1.startClock();
 
   //*** USAR SOMENTE na montagem inicial ***
   /*
@@ -69,10 +76,6 @@ void setup(){
   EEPROM.put(16, cltOS);  
   */
 
-  /*
-  RTC1.setDate(27,05,21);
-  RTC1.setTime(13,52,35);
-  */
   
   //busca valores de parametros na EEPROM
   EEPROM.get(0, tempSet);
@@ -90,12 +93,12 @@ void setup(){
 
   //tela de inicializacao
   byte i;
-  lcd.setCursor(1,0);
-  lcd.print("MP LABS PSC-01");
+  lcd.setCursor(0,0);
+  lcd.print("MPS01 V 0.0.2");
   lcd.setCursor(0,1);
   for (i=0; i<=19; i++){
     lcd.write(255);
-    delay(50);
+    delay(150);
   }
 }
 
@@ -115,19 +118,8 @@ void loop(){
         int decimal = pscTemp * 100; decimal = decimal % 100; decimal = decimal/10;
         lcd.print("."); lcd.print(decimal);
 
-        if (hora < 10)
-           lcd.setCursor(12, 0);
-        else
-           lcd.setCursor(11, 0); 
-        lcd.print(hora);
-        if (segundo % 2 == 0)
-           lcd.print(":"); 
-        else
-           lcd.print(" ");   
-        if (minuto < 10)
-           lcd.print("0");
-        lcd.print(minuto); 
-        
+        lcd.setCursor(11, 0);
+        lcd.print(hora); lcd.print(":"); lcd.print(minuto);
 
         lcd.setCursor(11, 1);
         lcd.print(semana[dsemana]);
@@ -158,15 +150,13 @@ void loop(){
           lcd.print("PSC ");
         lcd.print(pscTemp, 1); lcd.write(223); lcd.print("C");
         lcd.setCursor(0,1);
-        lcd.print(hora); lcd.print(":"); lcd.print(minuto); lcd.print(":"); lcd.print(segundo);
+        lcd.print(hora); lcd.print(":"); lcd.print(minuto);
         lcd.setCursor(6, 10);
         if (cltTemp < 10)
           lcd.print("CLT  ");
         else
           lcd.print("CLT ");
         lcd.print(cltTemp, 1); lcd.write(223); lcd.print("C");
-        if (digitalRead(PB3) == LOW)
-          estado = HOME;
         delay(200);
         }
 
@@ -192,25 +182,7 @@ void loop(){
         estado = HOME;   
       delay(200);
       break;
-      }  
-    case AJUSTES_FIL:{  //****************************Entrada de ajustes do filtro***********************************
-      lcd.clear();
-      lcd.setCursor(0,0);
-      lcd.print("CONFIG FILTRO");
-      while (digitalRead(PB1) && digitalRead(PB2) && digitalRead(PB3) == HIGH){
-
-        atualiza_sistema();
-        
-        }
-      if (digitalRead(PB1) == LOW)
-        estado = HOME;
-      if (digitalRead(PB2) == LOW)
-        estado = ADJ_T; 
-      if (digitalRead(PB3) == LOW)
-        estado = HOME; 
-      delay(200);
-      break;
-      }    
+      } 
 
     case ADJ_T:{  //******************************Ajuste de Temperatura da piscina********************************
       lcd.clear();
@@ -245,13 +217,54 @@ void loop(){
         }
       EEPROM.put(0, tempSet);
       if (digitalRead(PB2) == LOW)
-        estado = DIFF_ON;
+        estado = AJUSTES_AQC;
       if (digitalRead(PB3) == LOW)
         estado = AJUSTES_AQC;    
       delay(300);
 
       break;
       }
+
+       
+    case AJUSTES_FIL:{  //****************************Entrada de ajustes do filtro***********************************
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("CONFIG FILTRO");
+      while (digitalRead(PB1) && digitalRead(PB2) && digitalRead(PB3) == HIGH){
+
+        atualiza_sistema();
+        
+        }
+      if (digitalRead(PB1) == LOW)
+        estado = AJUSTES_TEC;
+      if (digitalRead(PB2) == LOW)
+        estado = ADJ_T; 
+      if (digitalRead(PB3) == LOW)
+        estado = HOME; 
+      delay(200);
+      break;
+      }  
+
+    case AJUSTES_TEC:{  //****************************Entrada de ajustes tecnicos***********************************
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("CONFIG TECNICA");
+      while (digitalRead(PB1) && digitalRead(PB2) && digitalRead(PB3) == HIGH){
+
+        atualiza_sistema();
+        
+        }
+      if (digitalRead(PB1) == LOW)
+        estado = HOME;
+      if (digitalRead(PB2) == LOW)
+        estado = DIFF_ON; 
+      if (digitalRead(PB3) == LOW)
+        estado = HOME; 
+      delay(200);
+      break;
+      }    
+
+    
 
     case DIFF_ON:{  //***********************Ajuste de temperatura diferencial para ligar**************************
       lcd.clear();
@@ -288,13 +301,13 @@ void loop(){
       if (digitalRead(PB2) == LOW)
         estado = DIFF_OFF;
       if (digitalRead(PB3) == LOW)
-        estado = AJUSTES_AQC;    
+        estado = AJUSTES_TEC;    
       delay(300);
 
       break;
       }
 
-    case DIFF_OFF:{  //******************************Ajuste de temperatura diferencial para desligar********************************
+    case DIFF_OFF:{  //***********************Ajuste de temperatura diferencial para desligar*************************
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("DIFERENCIAL DESL");
@@ -327,13 +340,14 @@ void loop(){
         }
       EEPROM.put(8, difTempOFF);
       if (digitalRead(PB2) == LOW)
-        estado = AJUSTES_AQC;
+        estado = AJUSTES_TEC;
       if (digitalRead(PB3) == LOW)
-        estado = AJUSTES_AQC;    
+        estado = AJUSTES_TEC;    
       delay(300);
 
       break;
       }
+
 
 
 
@@ -345,15 +359,23 @@ void loop(){
 
 
 void atualiza_sistema(){
-  pscTemp = 0.05376 * analogRead(PSC);
-  cltTemp = 0.05376 * analogRead(CLT);
-  if(pscTemp < tempSet-0.3 && difTempON < (cltTemp - pscTemp))
+
+  float v  = (vcc*analogRead(PSC))/1023;
+  float rt = (vcc*R)/v - R;
+  pscTemp  = (beta / log(rt/rx)) - 273;
+    
+  cltTemp  = 0.05376 * analogRead(CLT);
+  
+  if(cltTemp < DeICE || cltTemp > OverHeat) // verifica as condicoes excepcionais - congelamento e sobreaquecimento
     digitalWrite(AQC, HIGH);
-  if(pscTemp > tempSet || difTempOFF > (cltTemp - pscTemp))
-    digitalWrite(AQC, LOW);
-     
-  hora = RTC1.getHours();
-  minuto = RTC1.getMinutes();
-  dsemana = 2;
-  segundo = RTC1.getSeconds();
+    else{                                   // verifica o ajuste de temperatura
+      if(pscTemp < (tempSet-0.3) && difTempON < (cltTemp - pscTemp))
+        digitalWrite(AQC, HIGH);
+      if(pscTemp > tempSet || difTempOFF > (cltTemp - pscTemp))
+        digitalWrite(AQC, LOW);
+    }
+  
+  hora = 11;
+  minuto = 25;
+  dsemana = 1;
 }
