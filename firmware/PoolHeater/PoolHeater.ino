@@ -17,6 +17,12 @@
 #define FIL 5 //output relé filtro
 #define PSC A0 //analog sensor piscina
 #define CLT A1 //analog sensor coletor
+#define RS 8
+#define EN 9
+#define D4 13
+#define D5 12
+#define D6 11
+#define D7 10
 
 // parametros do termistor
 const double beta = 3600.0;
@@ -28,12 +34,12 @@ const float rx = r0 * exp(-beta/t0);
 const double vcc = 5.0;
 const double R = 10000.0;
  
-LiquidCrystal lcd(8, 9, 13, 12, 11, 10); //define pinos do LCD (RS, E, D4, D5, D6, D7)
+LiquidCrystal lcd(RS, EN, D4, D5, D6, D7); //define pinos do LCD
 BigNums2x2 bigNuma(TREK); // inicializa as fontes grandes
 static DS1307 RTC1;
 
 //cria os possiveis estados do menu e inicializa em HOME
-enum Estados{HOME, GERAL, BOMBAS, AJUSTES_AQC, AJUSTES_FIL, PROG_1L, PROG_1D, PROG_2L, PROG_2D, AJUSTES_DH, HORA, DATA, SEMAN, AJUSTES_TEC, ADJ_BOMBAS, ADJ_T, DIFF_ON, DIFF_OFF, PSC_OS, CLT_OS};
+enum Estados{HOME, GERAL, BOMBAS, AJUSTES_AQC, AJUSTES_FIL, PROG_1L, PROG_1D, PROG_2L, PROG_2D, AJUSTES_DH, HORA, DATA, SEMAN, AJUSTES_TEC, ADJ_BOMBAS, ADJ_T, PISC_LG, PISC_DL, DIFF_ON, DIFF_OFF, PSC_OS, CLT_OS};
 Estados estado = HOME;
 
 //strings para os dias da semana
@@ -314,6 +320,88 @@ void loop(){
       break;
       }
 
+
+//#####################################################################################################
+
+    case PISC_LG:{  //*****************Ajuste de PROG_1 LIGA **************************
+      index = 0;
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("LIGA");
+      lcd.setCursor(0,1);
+      lcd.print("CIRC DIARIA");
+      lcd.setCursor(7,0);
+      lcd.print(semana[dsem_prog[index]]); 
+      lcd.print(" "); 
+      if(hora_prog[index] < 10)
+        lcd.print("0");
+      lcd.print(hora_prog[index]); 
+      lcd.print(":");
+      if(min_prog[index] < 10)
+        lcd.print("0");
+      lcd.print(min_prog[index]);
+      while (digitalRead(PB_2) && digitalRead(PB_3) == HIGH){
+        atualiza_sistema();
+        if(digitalRead(PB_1) == LOW){
+          semFlag = 1;
+          dsem_prog[index]  = configuraDH(dsem_prog[index], 0, 9, 7);
+          EEPROM.put(20+(2*index), dsem_prog[index]);
+          delay(200);
+          hora_prog[index] = configuraDH(hora_prog[index], 0, 23, 11);
+          EEPROM.put(30+(2*index), hora_prog[index]);
+          delay(200);
+          min_prog[index] = configuraDH(min_prog[index], 0, 59, 14);
+          EEPROM.put(40+(2*index), min_prog[index]);
+          delay(200);
+        }
+      }
+      if (digitalRead(PB_2) == LOW)
+        estado = PISC_DL;
+      if (digitalRead(PB_3) == LOW)
+        estado = AJUSTES_AQC;    
+      delay(200);
+      break;
+      }
+
+    case PISC_DL:{  //*****************Ajuste de PROG_1 DESL **************************
+      index = 1;
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("DESL");
+      lcd.setCursor(0,1);
+      lcd.print("CIRC DIARIA");
+      lcd.setCursor(7,0);
+      lcd.print(semana[dsem_prog[index-1]]); 
+      lcd.print(" "); 
+      if(hora_prog[index] < 10)
+        lcd.print("0");
+      lcd.print(hora_prog[index]); 
+      lcd.print(":");
+      if(min_prog[index] < 10)
+        lcd.print("0");
+      lcd.print(min_prog[index]);
+      while (digitalRead(PB_2) && digitalRead(PB_3) == HIGH){
+        atualiza_sistema();
+        if(digitalRead(PB_1) == LOW){
+          hora_prog[index] = configuraDH(hora_prog[index], 0, 23, 11);
+          EEPROM.put(30+(2*index), hora_prog[index]);
+          delay(200);
+          min_prog[index] = configuraDH(min_prog[index], 0, 59, 14);
+          EEPROM.put(40+(2*index), min_prog[index]);
+          delay(200);
+        }
+      }
+      if (digitalRead(PB_2) == LOW)
+        estado = AJUSTES_AQC;
+      if (digitalRead(PB_3) == LOW)
+        estado = AJUSTES_AQC;    
+      delay(200);
+      break;
+      }
+
+//#####################################################################################################
+
+
        
     case AJUSTES_FIL:{  //****************************Entrada de ajustes do filtro***********************************
       lcd.clear();
@@ -336,9 +424,9 @@ void loop(){
       index = 0;
       lcd.clear();
       lcd.setCursor(0,0);
-      lcd.print("PROG.1");
-      lcd.setCursor(0,1);
       lcd.print("LIGA");
+      lcd.setCursor(0,1);
+      lcd.print("PROG.1");
       lcd.setCursor(7,0);
       lcd.print(semana[dsem_prog[index]]); 
       lcd.print(" "); 
@@ -376,9 +464,9 @@ void loop(){
       index = 1;
       lcd.clear();
       lcd.setCursor(0,0);
-      lcd.print("PROG.1");
+      lcd.print("DESLPROG.1");
       lcd.setCursor(0,1);
-      lcd.print("DESL");
+      lcd.print("PROG.1");
       lcd.setCursor(7,0);
       lcd.print(semana[dsem_prog[index-1]]); 
       lcd.print(" "); 
@@ -709,6 +797,8 @@ void atualiza_sistema(){
   dia     = RTC1.getDay();
   mes     = RTC1.getMonth();
   ano     = RTC1.getYear();
+  //if (hora+minuto+segundo == 0)
+  //  RTC1.setSeconds(20);  
 }
 
 float configura (float param, float minimo, float maximo){
