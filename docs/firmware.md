@@ -62,3 +62,7 @@ In `AUTO`, the heating pump follows the differential temperature demand, collect
 | `7` | Return the pool and collector temperatures |
 
 Commands `4` to `6` update the filter mode in RAM, then store the **heating** mode at the filter's EEPROM address. Set the filter mode on the front panel to save it correctly across a power cycle. The release preserves the original Bluetooth implementation for reference.
+
+## Build verification
+
+The archived sketches were compiled for Arduino Uno with Arduino CLI 1.6.0, Arduino AVR Boards 1.8.8 and LiquidCrystal 1.0.7. Versions `v0.0.2` through `v0.3.0_BT` and the PCB test sketch compiled. The original `v0.0.1` fails because the DS1307 declaration is missing its RTC include and `segundo` is undeclared. This check covers compilation.

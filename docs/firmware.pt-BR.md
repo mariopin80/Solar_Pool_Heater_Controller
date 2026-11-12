@@ -62,3 +62,7 @@ A `v0.2.2` inicializa a UART por software. A `v0.3.0_BT` acrescenta comandos de 
 | `7` | Retorna as temperaturas da piscina e do coletor |
 
 Os comandos `4` a `6` atualizam o modo do filtro na RAM e gravam o modo do **aquecedor** no endereço do filtro na EEPROM. Ajuste o modo do filtro pelo painel para gravá-lo corretamente e mantê-lo após desligar e ligar. O release preserva a implementação Bluetooth original como referência.
+
+## Verificação de compilação
+
+Os sketches do acervo foram compilados para Arduino Uno com Arduino CLI 1.6.0, Arduino AVR Boards 1.8.8 e LiquidCrystal 1.0.7. As versões `v0.0.2` a `v0.3.0_BT` e o sketch de teste da PCB compilaram. A `v0.0.1` original falha porque falta o include do RTC para o DS1307 e a variável `segundo` está sem declaração. Esta verificação cobre a compilação.
