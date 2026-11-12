@@ -1,7 +1,7 @@
 /****************************************************/
 /* Controlador de terperatura e filtro para piscina */
 /* Autor: Mario Pin                                 */
-/* Vesão: 0.2.0 - 08/10/2021                        */
+/* Vesão: 0.2.1 - 15/10/2021                        */
 /****************************************************/
 
 #include <LiquidCrystal.h>
@@ -39,7 +39,8 @@ BigNums2x2 bigNuma(TREK); // inicializa as fontes grandes
 static DS1307 RTC1;
 
 //cria os possiveis estados do menu e inicializa em HOME
-enum Estados{HOME, GERAL, BOMBAS, AJUSTES_AQC, AJUSTES_FIL, PROG_1L, PROG_1D, PROG_2L, PROG_2D, AJUSTES_DH, HORA, DATA, SEMAN, AJUSTES_TEC, ADJ_BOMBAS, ADJ_T, PISC_LG, PISC_DL, DIFF_ON, DIFF_OFF, PSC_OS, CLT_OS};
+enum Estados{HOME, GERAL, BOMBAS, AJUSTES_AQC, AJUSTES_FIL, PROG_1L, PROG_1D, PROG_2L, PROG_2D, AJUSTES_DH, HORA, DATA, SEMAN, 
+              AJUSTES_TEC, ADJ_BOMBAS, ADJ_T, PISC_LG, PISC_DL, DIFF_ON, DIFF_OFF, PSC_OS, CLT_OS, ANTI_ICE, O_HEAT};
 Estados estado = HOME;
 
 //strings para os dias da semana
@@ -53,8 +54,8 @@ float pscOS;
 float cltOS;
 float difTempON;
 float difTempOFF;
-float DeICE = 4;
-float OverHeat = 65;
+float DeICE;
+float OverHeat;
 float tempSet;
 float v;
 float rt;
@@ -72,6 +73,8 @@ byte FIL_bomba;
 int ano;
 byte index;
 bool semFlag = 0;
+bool cond_t = 0;
+bool cond_d = 0;
 
 void atualiza_sistema();        //funcao para atualizar os dados
 float configura (float param, float minimo, float maximo);  //funcao para entrada de configuracoes
@@ -88,6 +91,8 @@ void setup(){
   EEPROM.put(8,  5.0);
   EEPROM.put(12, 0.0);
   EEPROM.put(16, 0.0);
+  EEPROM.put(60, 4.0);
+  EEPROM.put(64, 65.0);
   EEPROM.put(20, 0x00);
   EEPROM.put(30, 0x00);
   EEPROM.put(40, 0x00);
@@ -109,6 +114,8 @@ void setup(){
   EEPROM.get(8, difTempOFF);
   EEPROM.get(12, pscOS);
   EEPROM.get(16, cltOS);
+  EEPROM.get(60, DeICE);
+  EEPROM.get(64, OverHeat);
   EEPROM.get(20, dsem_prog[0]);
   EEPROM.get(30, hora_prog[0]);
   EEPROM.get(40, min_prog[0]);
@@ -134,7 +141,7 @@ void setup(){
   //tela de inicializacao
   byte i;
   lcd.setCursor(0,0);
-  lcd.print("MPS01-v0.2.0");
+  lcd.print("MPS01-v0.2.1");
   lcd.setCursor(0,1);
   for (i=0; i<=19; i++){
     lcd.write(255);
@@ -150,6 +157,16 @@ void loop(){
       lcd.setCursor(7,1); lcd.write(223); lcd.print("C");
       while (digitalRead(PB_1) && digitalRead(PB_2) == HIGH){
         atualiza_sistema();
+        lcd.setCursor(7, 0);
+        lcd.print("   ");
+        if(cltTemp < DeICE){
+          lcd.setCursor(7, 0);
+          lcd.print("ICE");
+        }
+        if(cltTemp > OverHeat){
+          lcd.setCursor(7, 0);
+          lcd.print("OVH");
+        }
         bigNuma.print(pscTemp, 2, 0, 0); 
         lcd.setCursor(5,1);
         int decimal = pscTemp * 100; decimal = decimal % 100; decimal = decimal/10;
@@ -171,7 +188,7 @@ void loop(){
         lcd.setCursor(13, 1); lcd.print(semana[dsemana]);
         delay (100);
          }
-       if (digitalRead(PB_2) == LOW)
+      if (digitalRead(PB_2) == LOW)
         estado = GERAL;
       if (digitalRead(PB_1) == LOW)
         estado = BOMBAS;  
@@ -671,12 +688,41 @@ void loop(){
       cltOS = configura(cltOS, -5.0, 5.0);
       EEPROM.put(16, cltOS);
       if (digitalRead(PB_2) == LOW)
+        estado = ANTI_ICE;
+      if (digitalRead(PB_3) == LOW)
+        estado = AJUSTES_TEC;    
+      delay(200);
+      break;
+      }
+
+    case ANTI_ICE:{  //***************Ajuste de temperatura de anti congelamento******************
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("ANTICONGELAMENTO");
+      DeICE = configura(DeICE, 0, 7);
+      EEPROM.put(60, DeICE);
+      if (digitalRead(PB_2) == LOW)
+        estado = O_HEAT;
+      if (digitalRead(PB_3) == LOW)
+        estado = AJUSTES_TEC;    
+      delay(200);
+      break;
+      }
+
+    case O_HEAT:{  //***************Ajuste de sobretemperatura dos coletores******************
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("SOBRETEMPERATURA");
+      OverHeat = configura(OverHeat, 50, 90);
+      EEPROM.put(64, OverHeat);
+      if (digitalRead(PB_2) == LOW)
         estado = AJUSTES_TEC;
       if (digitalRead(PB_3) == LOW)
         estado = AJUSTES_TEC;    
       delay(200);
       break;
       }
+      
     }
 }
 
@@ -685,9 +731,6 @@ void loop(){
 void atualiza_sistema(){
 
   // ***************************** AQUECEDOR **********************************
-  
-  bool cond_t;
-  bool cond_d;
   
   v  = (vcc*analogRead(PSC))/1023;
   rt = v*R/(vcc-v);
@@ -701,10 +744,12 @@ void atualiza_sistema(){
     if(cltTemp < DeICE || cltTemp > OverHeat) // verifica as condicoes excepcionais - congelamento e sobreaquecimento
       cond_t = HIGH;
       else{                                   // verifica o ajuste de temperatura
-        if(pscTemp < (tempSet-0.5) && difTempON < (cltTemp - pscTemp))
+        if(pscTemp < (tempSet - 0.5) && difTempON < (cltTemp - pscTemp))
           cond_t = HIGH;
-        else
-          cond_t = LOW;
+        else{
+          if(cltTemp > (DeICE + 2.0) && cltTemp < (OverHeat - 3.0) && (pscTemp > tempSet || difTempOFF < (cltTemp - pscTemp)))
+            cond_t = LOW;
+        }
     }
   
 
