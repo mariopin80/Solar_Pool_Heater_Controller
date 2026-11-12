@@ -159,11 +159,11 @@ void loop(){
         atualiza_sistema();
         lcd.setCursor(7, 0);
         lcd.print("   ");
-        if(cltTemp < DeICE){
+        if(cltTemp < DeICE && segundo % 2 == 0){
           lcd.setCursor(7, 0);
           lcd.print("ICE");
         }
-        if(cltTemp > OverHeat){
+        if(cltTemp > OverHeat && segundo % 2 == 0){
           lcd.setCursor(7, 0);
           lcd.print("OVH");
         }
@@ -731,28 +731,33 @@ void loop(){
 void atualiza_sistema(){
 
   // ***************************** AQUECEDOR **********************************
-  
-  v  = (vcc*analogRead(PSC))/1023;
+  byte med;
+  v=0;
+  for (med=0; med<50; med++){
+    v  = v+(vcc*analogRead(PSC))/1023;
+  }
+  v  = v/50;
   rt = v*R/(vcc-v);
   pscTemp  = (beta / log(rt/rx)) - 273 + pscOS;
  
-  v  = (vcc*analogRead(CLT))/1023;
+  v=0;
+  for (med=0; med<50; med++){
+    v  = v+(vcc*analogRead(CLT))/1023;
+  }
+  v  = v/50;
   rt = v*R/(vcc-v);
   cltTemp  = (beta / log(rt/rx)) - 273 + cltOS;
     
   if (AQC_bomba == 0){  
     if(cltTemp < DeICE || cltTemp > OverHeat) // verifica as condicoes excepcionais - congelamento e sobreaquecimento
       cond_t = HIGH;
-      else{                                   // verifica o ajuste de temperatura
-        if(pscTemp < (tempSet - 0.5) && difTempON < (cltTemp - pscTemp))
-          cond_t = HIGH;
-        else{
-          if(cltTemp > (DeICE + 2.0) && cltTemp < (OverHeat - 3.0) && (pscTemp > tempSet || difTempOFF < (cltTemp - pscTemp)))
-            cond_t = LOW;
-        }
-    }
-  
-
+                                        
+    if(pscTemp < (tempSet - 0.5) && difTempON < (cltTemp - pscTemp)) // verifica o ajuste de temperatura para ligar
+      cond_t = HIGH;
+        
+    if(cltTemp > (DeICE + 2.0) && cltTemp < (OverHeat - 3.0) && (pscTemp > tempSet || difTempOFF > (cltTemp - pscTemp))) // verifica condições para desligar
+      cond_t = LOW;
+   
     int tempo_a = hora*60 + minuto;
     int tempo_l = hora_prog[2]*60 + min_prog[2];
     int tempo_d = hora_prog[3]*60 + min_prog[3];
@@ -821,7 +826,7 @@ void atualiza_sistema(){
         }
         break;
       }
-     }  
+    }  
     if(cond_d == HIGH || cond_t == HIGH)
       digitalWrite(AQC, HIGH);
     else
@@ -832,7 +837,8 @@ void atualiza_sistema(){
       digitalWrite(AQC, HIGH);
     else
       digitalWrite(AQC, LOW);
-  }  
+  }
+   
   // ***************************** FILTRO **************************************
   if(FIL_bomba == 0){
     
@@ -911,7 +917,8 @@ void atualiza_sistema(){
       digitalWrite(FIL, HIGH);
     else
       digitalWrite(FIL, LOW);
-  }  
+  }
+  
   //************ ATUALIZA HORA E DATA ***************     
   hora    = RTC1.getHours();
   minuto  = RTC1.getMinutes();
