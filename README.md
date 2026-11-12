@@ -10,11 +10,11 @@ Designed by Mario Pin (PU2PTU). The controller compares water temperatures at th
 
 | Board | Controller and clock | Firmware |
 | --- | --- | --- |
-| [MPS01 1.0](hardware/MPS01/1.0) | ATmega328P at 16 MHz and DS1307 | AVR. The original PCB reverses SDA and SCL. |
-| [MPS01 1.1](hardware/MPS01/1.1) | ATmega328P at 16 MHz and DS1307 | AVR. The PCB corrects the I²C routing. |
-| [MPS02 2.0](hardware/MPS02/2.0) | ESP32-WROOM-32D and DS3231M | KiCad hardware archive. A firmware port is needed for this board. |
+| [MPS01 1.0](hardware/MPS01/1.0) | ATmega328P at 16 MHz and DS1307 | Historical PCB. This revision reverses SDA and SCL. |
+| [MPS01 1.1](hardware/MPS01/1.1) | ATmega328P at 16 MHz and DS1307 | Target board for the archived AVR firmware. Corrected I²C routing. |
+| [MPS02 2.0](hardware/MPS02/2.0) | ESP32-WROOM-32D and DS3231M | KiCad design only. This revision stayed at the design stage. |
 
-The MPS01 uses two 10 kΩ NTC probes, a parallel 16×2 LCD, three push buttons and separate relays for the heating and filtration pumps. The hardware guide includes the Arduino pinout, connector assignments and the sensor-label discrepancy between the MPS01 schematics and sketches. [Hardware and assembly guide](docs/hardware.md) · [Original parts list](docs/BOM.xlsx)
+The MPS01 1.1 is the target for all 13 firmware versions. The MPS01 uses two 10 kΩ NTC probes, a parallel 16×2 LCD, three push buttons and separate relays for the heating and filtration pumps. The hardware guide includes the Arduino pinout, connector assignments and the sensor-label discrepancy between the MPS01 schematics and sketches. [Hardware and assembly guide](docs/hardware.md) · [Original parts list](docs/BOM.xlsx)
 
 ## Firmware
 

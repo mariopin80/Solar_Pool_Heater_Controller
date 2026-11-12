@@ -1,0 +1,33 @@
+***** 0.0.1 ***** 13/05/2021
+Versão incial
+Primeiros testes
+
+***** 0.0.2 ***** 25/05/2021
+Primeira versão minimamente funcional
+   Aquecedor
+      Temperatura diferencial LIGA/DESL 
+
+***** 0.0.3 ***** 27/05/2021
+Implementação de offset para temperatura de sensores
+
+***** 0.0.4 ***** 27/05/2021
+Implementação de função de configuração
+Implementação inicial do RTC
+Redução do tamanho do firmware
+
+***** 0.0.5 ***** 28/05/2021
+Implementação de configuração de data/horário
+Implementação inicial de programação de filtro
+
+***** 0.0.6 ***** 21/06/2021
+Primeiros testes com PCB 1.0
+SCL/SDA invertidos (solução Wire Wrapping) ***** REVISAR PLACA 1.1 *****
+Resistor e NTC invertidos (solução programação)
+Implementação de programação de filtro funcional
+
+***** 0.1.0 ***** 22/06/2021
+>>>MVP<<<
+Controle de estado das bombas de forma MANUAL/AUTOMATICO
+
+***** 0.1.1 ***** 24/06/2021
+correção do drift do RTC
