@@ -6,6 +6,14 @@ The 13 snapshots belong to the MPS01 1.1 firmware. Version identifiers follow th
 
 [Original notes](docs/original/historico-de-revisao.txt)
 
+## v0.4.0-beta
+
+- Replaces blocking menu delays with debounced button events, long-press back/cancel and repeat while editing.
+- Adds independent control demands, probe and RTC diagnostics, and schedules that cross midnight.
+- Migrates valid legacy EEPROM settings to two checksummed records and fixes the Bluetooth filter-mode persistence error.
+- Adds Bluetooth UART protocol v1, a local enable/disable setting and a compile-time option to remove it.
+- Compiled for Arduino Uno. Pending verification on the physical MPS01 1.1.
+
 ## v0.3.0_BT · 2021-11-12
 
 - Adds serial commands `1`–`6` for both pumps and `7` for the two temperature readings. Shortens menu delays.

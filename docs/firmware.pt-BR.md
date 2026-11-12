@@ -4,65 +4,64 @@
 
 ## Compilação para a MPS01 1.1
 
-1. Baixe o ZIP do código-fonte do [release](https://github.com/mariopin80/Aquecedor_piscina/releases) desejado ou faça checkout da tag. Abra `firmware/PoolHeater/PoolHeater.ino`.
-2. Na Arduino IDE, instale o pacote Arduino AVR Boards e a biblioteca LiquidCrystal. Copie as [pastas BigNums2x2 e RTC](../libraries) para o diretório `libraries` do seu sketchbook. EEPROM, SoftwareSerial e Wire fazem parte do pacote AVR.
-3. Selecione **Arduino Uno** para o ATmega328P a 16 MHz. Use a porta serial e o procedimento de gravação correspondentes ao bootloader. Para um AVR novo, programe o microcontrolador com um gravador AVR antes de usar a gravação serial.
+1. Baixe o ZIP do código-fonte da `v0.4.0-beta` nos [releases](https://github.com/mariopin80/Aquecedor_piscina/releases). Extraia todo o ZIP para manter juntos o sketch e os arquivos auxiliares.
+2. Na Arduino IDE, instale Arduino AVR Boards 1.8.8 e LiquidCrystal 1.0.7. Copie a pasta [BigNums2x2](../libraries/BigNums2x2) para o diretório `libraries` do seu sketchbook. Wire e EEPROM fazem parte do pacote AVR. O Bluetooth também usa SoftwareSerial.
+3. Abra `firmware/PoolHeater/PoolHeater.ino`. Selecione **Arduino Uno** para o ATmega328P a 16 MHz. Use o método de gravação do bootloader da placa ou um gravador AVR por ISP.
 
-Para compilar com Arduino CLI, execute na raiz do repositório
+Para verificar a compilação com Arduino CLI, execute na raiz do repositório
 
 ```sh
-arduino-cli core update-index
-arduino-cli core install arduino:avr
-arduino-cli lib install LiquidCrystal
 arduino-cli compile --fqbn arduino:avr:uno --libraries libraries firmware/PoolHeater
 ```
 
-As 13 versões do acervo são da MPS01 1.1. Nos protótipos mais antigos, confira a pinagem nas declarações de cada sketch. [Guia de hardware](hardware.pt-BR.md)
+Para versões anteriores, consulte as instruções de compilação e inicialização da EEPROM disponíveis na tag correspondente. [Releases históricos](https://github.com/mariopin80/Aquecedor_piscina/releases)
 
-## Primeira partida
+## Primeira partida e migração
 
-Os sketches históricos leem os ajustes diretamente da EEPROM. Em um microcontrolador novo, inicialize a memória uma vez, com as cargas das bombas desconectadas. O bloco comentado `USAR SOMENTE na montagem inicial` em `setup()` traz os valores iniciais originais. Habilite-o numa cópia local para a primeira gravação. A partir da `v0.2.0`, o horário de circulação também usa os bytes 24, 26, 34, 36, 44 e 46. Acrescente estas gravações ao mesmo bloco temporário na primeira partida.
+Na primeira partida, a beta importa temperaturas, modos das bombas e agendas válidos da EEPROM antiga. Campos vazios ou inválidos recebem valores padrão. Com EEPROM virgem, as duas bombas começam em `DESL`. A temperatura-alvo é 25 °C, com diferenciais de 12 °C para ligar e 5 °C para desligar. Os limites de anticongelamento e de coletor quente são 4 °C e 65 °C. A agenda antiga com horário de ligar posterior ao de desligar ficava inativa. A migração a mantém inativa até que seja editada.
 
-```cpp
-EEPROM.update(24, 0);
-EEPROM.update(26, 0);
-EEPROM.update(34, 0);
-EEPROM.update(36, 0);
-EEPROM.update(44, 0);
-EEPROM.update(46, 0);
-```
+A beta grava os novos ajustes em dois registros com CRC nos endereços 80–143. Ao reinstalar um firmware anterior, ele recupera os ajustes anteriores à beta nos endereços 0 a 67. A beta lê seus próprios ajustes nos novos registros. O modo importado do filtro vem do valor encontrado no endereço 52 da EEPROM antiga. Confira esse ajuste ao atualizar da versão Bluetooth.
 
-Em seguida, grave novamente o sketch original para que as próximas partidas conservem os ajustes. Confira hora, data e dia da semana do RTC no menu. Horários de ligar e desligar iguais a 00:00 produzem um intervalo vazio.
+Na bancada, deixe as cargas das bombas desconectadas. Confira a identificação das duas sondas, a data e a hora e os modos de cada bomba antes de passar para automático. [Guia de hardware](hardware.pt-BR.md)
 
 ## Painel
 
-A sequência abaixo corresponde às versões `v0.2.2` e `v0.3.0_BT`.
-
-| Tela | Operação |
+| Ação | Resultado |
 | --- | --- |
-| Inicial | O número grande é a temperatura da piscina. Pressione **+** para consultar as duas temperaturas e **Enter** para abrir a sequência de ajustes. |
-| `ESTADO BOMBAS` | Pressione **+** para abrir os modos. Use **Enter** para editar e confirmar cada bomba em sequência. Selecione `AUTO`, `LIGA` ou `DESL` com **+** e **−**. |
-| `AJUSTE AQUECEDOR` | Pressione **+** para ajustar `TEMP PISCINA` e, em seguida, o dia e os horários de circulação em `C DIA`. |
-| `AJUSTE FILTRO` | Pressione **+** para ajustar o dia e os horários do filtro em `PROG.1`. |
-| `AJUSTE DATA/HORA` | Pressione **+** para ajustar hora, data e dia da semana. |
-| `CONFIG TECNICA` | Pressione **+** para ajustar os diferenciais, os offsets dos sensores e os limites de anticongelamento e sobretemperatura. |
+| Toque curto em **Enter** | Abre um menu ou ajuste, avança ao próximo campo de data ou horário, ou confirma a edição |
+| Segure **Enter** por cerca de 0,7 s | Volta um nível ou cancela a edição em curso |
+| **+** / **−** | Percorre os itens ou altera o valor em edição |
+| Segure **+** / **−** em um ajuste numérico ou de agenda | Repete depois de cerca de 0,44 s e, em seguida, a cada 0,11 s |
+| **+** ou **−** na tela inicial | Alterna entre a tela inicial e a visão das duas sondas |
 
-No título de um menu, **Enter** avança para o título seguinte e **−** retorna à tela inicial. Dentro de um ajuste, use **Enter** para editar ou confirmar e **+**/**−** para alterar o valor. Na programação, `TOD` significa todos os dias, `FDS` fins de semana e `UTL` dias úteis. Use um horário de ligar anterior ao de desligar no mesmo dia. O código compara os dois horários dentro de um único dia.
+As telas de ajustes mostram `*` durante a edição e `~` enquanto gravam. Após 30 segundos sem interação, o painel volta ao início e descarta a edição em curso. A tela inicial mostra a temperatura da piscina e o motivo do comando da bomba solar. O `F` no canto superior direito indica que a saída do filtro está acionada. Na tela de detalhes, cada sonda mostra a temperatura ou seu diagnóstico.
 
-Em `AUTO`, a bomba de aquecimento segue a demanda por diferencial, os limites de temperatura do coletor e o horário de circulação. A bomba do filtro segue seu próprio horário. Os modos manuais `LIGA` e `DESL` comandam a saída diretamente e ignoram a lógica automática.
-
-## Bluetooth experimental
-
-A `v0.2.2` inicializa a UART por software. A `v0.3.0_BT` acrescenta comandos de um caractere a 9.600 baud.
-
-| Caractere | Comando |
+| Menu | Ajuste |
 | --- | --- |
-| `1` / `2` / `3` | Bomba de aquecimento em automático / ligada / desligada |
-| `4` / `5` / `6` | Bomba de filtragem em automático / ligada / desligada |
-| `7` | Retorna as temperaturas da piscina e do coletor |
+| `BOMBAS` | Modos independentes `AUTO`, `LIGA` e `DESL` |
+| `AQUECIMENTO` | Temperatura desejada da piscina |
+| `CIRCULACAO` | Dia e horários de circulação do circuito solar |
+| `FILTRAGEM` | Dia e horários de filtragem |
+| `RELOGIO` | Dia, mês, ano, hora e minuto. O dia da semana é calculado pela data. |
+| `AJUSTES TECNICOS` | Diferenciais de ligar e desligar, offsets, anticongelamento e limite de coletor quente |
+| `BLUETOOTH` | Em edição, use **+** para ativar ou **−** para desativar. Confirme com **Enter**. |
 
-Os comandos `4` a `6` atualizam o modo do filtro na RAM e gravam o modo do **aquecedor** no endereço do filtro na EEPROM. Ajuste o modo do filtro pelo painel para gravá-lo corretamente e mantê-lo após desligar e ligar. O release preserva a implementação Bluetooth original como referência.
+Para editar uma agenda, confirme o dia, a hora e o minuto de ligar, depois a hora e o minuto de desligar. `TOD` vale para todos os dias, `FDS` para os fins de semana e `UTL` para os dias úteis. Uma programação de sexta-feira das 22:00 às 02:00 termina no sábado às 02:00. Horários iguais desativam a janela. O dia selecionado é o de início.
 
-## Verificação de compilação
+## Lógica das bombas
 
-Os sketches do acervo foram compilados para Arduino Uno com Arduino CLI 1.6.0, Arduino AVR Boards 1.8.8 e LiquidCrystal 1.0.7. As versões `v0.0.2` a `v0.3.0_BT` e o sketch de teste da PCB compilaram. A `v0.0.1` original falha porque falta o include do RTC para o DS1307 e a variável `segundo` está sem declaração. Esta verificação cobre a compilação.
+- Em `AUTO`, o circuito solar avalia independentemente o anticongelamento, a circulação por coletor quente, a demanda por diferencial e a agenda. O LCD mostra o motivo ativo de maior prioridade, nessa ordem.
+- A beta mantém a ação histórica de coletor quente. Ao atingir o limite do coletor, o modo solar `AUTO` pede circulação, com margem de retorno de 3 °C. O anticongelamento tem margem de retorno de 2 °C.
+- A falha de qualquer sonda bloqueia o relé solar em todos os modos. Três leituras válidas por sonda liberam o funcionamento. A filtragem continua independente das sondas.
+- As agendas são suspensas se o RTC sinalizar parada, devolver data ou hora inválida ou falhar em duas leituras I²C consecutivas. O controle térmico solar continua seguindo as sondas. A filtragem manual fica disponível.
+- Os modos manuais `LIGA` e `DESL` confirmados persistem após reiniciar. Selecione `AUTO` para voltar ao controle térmico e às agendas.
+
+## Bluetooth
+
+Ative a comunicação pelo painel. A configuração inicial vem desligada na primeira migração ou com EEPROM virgem. Os pinos A2 e A3 mantêm a UART do módulo a 9.600 baud. O futuro aplicativo poderá consultar temperaturas, comandos dos relés e falhas, além de ajustar modos, agendas, parâmetros térmicos e relógio. [Especificação do protocolo](bluetooth.md)
+
+Para compilar sem Bluetooth, defina `POOLHEATER_ENABLE_BLUETOOTH` como `0` em `Board.h` ou passe `-DPOOLHEATER_ENABLE_BLUETOOTH=0` pela propriedade `compiler.cpp.extra_flags` do Arduino CLI. Os comandos antigos de um caractere podem ser habilitados com `POOLHEATER_ENABLE_LEGACY_BT=1`.
+
+## Verificação
+
+A beta compila para Arduino Uno com Bluetooth, com o módulo removido da compilação e com os comandos antigos opcionais. Os [testes de regressão em computador](../tests/control_and_buttons.cpp) cobrem eventos dos botões, agenda e decisões das bombas. O [comando para rodar os testes](firmware.md#verification) está no guia em inglês. Verifique o LCD, os botões, o RTC, as sondas, os relés e o módulo Bluetooth na bancada da MPS01 1.1 antes de conectar as cargas.

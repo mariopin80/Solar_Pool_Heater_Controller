@@ -4,65 +4,72 @@
 
 ## Build for MPS01 1.1
 
-1. Download the source ZIP of the desired [release](https://github.com/mariopin80/Aquecedor_piscina/releases) or check out its Git tag. The sketch is in `firmware/PoolHeater/PoolHeater.ino`.
-2. In Arduino IDE, install the Arduino AVR Boards package and the LiquidCrystal library. Copy the [BigNums2x2 and RTC folders](../libraries) to the sketchbook's `libraries` directory. EEPROM, SoftwareSerial and Wire are provided by the AVR core.
-3. Open the sketch and choose **Arduino Uno** for the ATmega328P at 16 MHz. Use the serial port and upload procedure for your bootloader. For a blank AVR, the board needs to be programmed with an AVR programmer before serial upload can work.
+1. Download the source ZIP for `v0.4.0-beta` from [Releases](https://github.com/mariopin80/Aquecedor_piscina/releases). Extract the entire ZIP so the sketch and its companion files stay together.
+2. Install Arduino AVR Boards 1.8.8 and LiquidCrystal 1.0.7 in Arduino IDE. Copy [BigNums2x2](../libraries/BigNums2x2) into your sketchbook's `libraries` directory. Wire and EEPROM come with the AVR core. The Bluetooth build also uses SoftwareSerial.
+3. Open `firmware/PoolHeater/PoolHeater.ino`. Select **Arduino Uno** for the ATmega328P at 16 MHz. Use the upload method for your bootloader or program the AVR through ISP.
 
-The equivalent Arduino CLI build from the repository root is
+To verify compilation from the repository root, run
 
 ```sh
-arduino-cli core update-index
-arduino-cli core install arduino:avr
-arduino-cli lib install LiquidCrystal
 arduino-cli compile --fqbn arduino:avr:uno --libraries libraries firmware/PoolHeater
 ```
 
-All archived versions belong to the MPS01 1.1 firmware lineage. Check the sketch declarations for the early prototype pin mapping. [Hardware guide](hardware.md)
+For older tags, use the build and EEPROM instructions included with that version. [Historical releases](https://github.com/mariopin80/Aquecedor_piscina/releases)
 
-## First boot
+## First boot and migration
 
-The historical sketches read settings directly from EEPROM. On a new MCU, initialize it once with pump loads disconnected. The commented block marked `USAR SOMENTE na montagem inicial` in `setup()` contains the original starting values. Enable it in a local copy for the initialization upload. Starting at `v0.2.0`, the circulation schedule also needs bytes 24, 26, 34, 36, 44 and 46 initialized. Add these writes to the same temporary block for that initial boot.
+The beta imports valid temperature settings, pump modes and schedules from the historical EEPROM addresses on first boot. Empty or invalid values get defaults. Both pumps start in `DESL` on blank EEPROM. The pool target defaults to 25 °C, with 12 °C and 5 °C differential thresholds. The antifreeze and hot collector thresholds default to 4 °C and 65 °C. A legacy interval whose start was later than its end was inactive in the old software, so migration leaves that interval inactive until edited.
 
-```cpp
-EEPROM.update(24, 0);
-EEPROM.update(26, 0);
-EEPROM.update(34, 0);
-EEPROM.update(36, 0);
-EEPROM.update(44, 0);
-EEPROM.update(46, 0);
+The beta stores future settings in two checksummed records at addresses 80–143. A downgrade recovers the pre-beta settings from addresses 0–67. The beta reads its own settings from the new records. The beta imports the value found at legacy address 52 for the filter mode, so verify it after an upgrade from the Bluetooth version.
+
+Start on the bench with pump loads disconnected. Verify the sensor labels, local date and time and each pump mode before enabling automatic operation. [Hardware guide](hardware.md)
+
+## Panel
+
+| Control | Action |
+| --- | --- |
+| Short **Enter** | Open a menu or a setting, move to the next part of a time or schedule, or confirm the setting |
+| Hold **Enter** for about 0.7 s | Back one level or cancel an unconfirmed edit |
+| **+** / **−** | Move between items or change the value being edited |
+| Hold **+** / **−** in a numeric or schedule setting | Repeat after about 0.44 s, then every 0.11 s |
+| **+** or **−** on the home screen | Toggle the detailed view of the two probes |
+
+The settings screens show `*` while editing and `~` while a save is in progress. After 30 seconds without key activity, it returns home and discards the edit in progress. The home screen shows the pool temperature and the reason for the solar output. `F` in the upper right indicates an active filter output. The details screen displays both probe temperatures or their individual diagnoses.
+
+| Menu | Settings |
+| --- | --- |
+| `BOMBAS` | Independent `AUTO`, `LIGA` and `DESL` modes |
+| `AQUECIMENTO` | Pool temperature target |
+| `CIRCULACAO` | Day and on/off times for solar-loop circulation |
+| `FILTRAGEM` | Day and on/off times for filtration |
+| `RELOGIO` | Day, month, year, hour and minute. Weekday is calculated from the date. |
+| `AJUSTES TECNICOS` | Start/stop differentials, two probe offsets, antifreeze and hot collector thresholds |
+| `BLUETOOTH` | Enable with **+** or disable with **−** while editing, then confirm with **Enter** |
+
+For either schedule, edit the day, start hour, start minute, stop hour and stop minute, then confirm. `TOD` is every day, `FDS` weekends and `UTL` weekdays. An interval such as Friday 22:00 to 02:00 runs until Saturday 02:00. Equal start and stop times disable the interval. The selection applies to the day on which the interval starts.
+
+## Pump behavior
+
+- In solar `AUTO`, the controller checks independent demands for antifreeze, hot collector circulation, differential heating and the circulation schedule. The display shows the highest-priority active reason in that order.
+- The beta retains the historical hot collector action. When the collector reaches the threshold, solar `AUTO` requests circulation, with a 3 °C return margin. Antifreeze uses a 2 °C return margin.
+- Either invalid probe blocks the solar relay in every mode. Three valid readings per probe restore operation. Filtration remains independent of the probes.
+- An invalid or halted RTC, or two consecutive I²C read failures, pauses timed circulation and filtration. Solar temperature control still follows the probes. Manual filtration is available.
+- Confirmed manual `LIGA` and `DESL` modes persist across restarts. Select `AUTO` to resume scheduling and thermal decisions.
+
+## Bluetooth
+
+Enable it from the front panel. The initial setting is off on first upgrade or blank EEPROM. A2 and A3 are the existing module UART at 9600 baud. The future app can query temperatures, relay commands and fault reasons or change modes, schedules, temperature settings and the clock. [Protocol specification](bluetooth.md)
+
+To build without Bluetooth, set `POOLHEATER_ENABLE_BLUETOOTH` to `0` in `Board.h` or pass `-DPOOLHEATER_ENABLE_BLUETOOTH=0` via the Arduino CLI `compiler.cpp.extra_flags` build property. Legacy one-character commands are opt-in through `POOLHEATER_ENABLE_LEGACY_BT=1`.
+
+## Verification
+
+The beta builds for Arduino Uno with Bluetooth enabled, with it compiled out and with the optional legacy commands enabled. Host-side regression tests cover button events, schedules and pump decisions. Run them from the repository root with a C++11 compiler.
+
+```sh
+g++ -std=c++11 -Ifirmware/PoolHeater tests/control_and_buttons.cpp \
+  firmware/PoolHeater/Buttons.cpp firmware/PoolHeater/Control.cpp -o pool-heater-tests
+./pool-heater-tests
 ```
 
-Then upload the original sketch again so subsequent boots retain the stored settings. Check the RTC time, date and weekday in the menu. An initialized on/off pair of 00:00 and 00:00 gives an empty schedule interval.
-
-## Front panel
-
-The menu flow below follows `v0.2.2` and `v0.3.0_BT`. Labels on the LCD are in Portuguese.
-
-| Screen | What to set |
-| --- | --- |
-| Home | The large number is the pool temperature. Press **+** for both temperature readings. Press **Enter** for the settings sequence. |
-| `ESTADO BOMBAS` | Press **+** to enter pump modes. Press **Enter** to edit and confirm each pump in turn. Select `AUTO`, `LIGA` (on) or `DESL` (off) with **+** and **−**. |
-| `AJUSTE AQUECEDOR` | Press **+** for `TEMP PISCINA`, then set the circulation day and on/off times under `C DIA`. |
-| `AJUSTE FILTRO` | Press **+** to set the filtration day and on/off times under `PROG.1`. |
-| `AJUSTE DATA/HORA` | Press **+** for time, date and weekday. |
-| `CONFIG TECNICA` | Press **+** for the differential thresholds, the two sensor offsets and the anti-ice and high-temperature thresholds. |
-
-At a settings heading, **Enter** advances to the next heading and **−** returns home. Within a setting, use **Enter** to edit or confirm and **+**/**−** to change the selected value. For schedules, `TOD` means every day, `FDS` weekends and `UTL` weekdays. Use an on time earlier than the off time on the same day. The code compares both times within a single day.
-
-In `AUTO`, the heating pump follows the differential temperature demand, collector temperature limits and circulation schedule. The filter follows its own schedule. Manual `LIGA` and `DESL` directly command the output and bypass the automatic decisions.
-
-## Bluetooth experiment
-
-`v0.2.2` initializes the software UART. `v0.3.0_BT` adds single-character commands at 9600 baud.
-
-| Character | Command |
-| --- | --- |
-| `1` / `2` / `3` | Heating pump auto / on / off |
-| `4` / `5` / `6` | Filter pump auto / on / off |
-| `7` | Return the pool and collector temperatures |
-
-Commands `4` to `6` update the filter mode in RAM, then store the **heating** mode at the filter's EEPROM address. Set the filter mode on the front panel to save it correctly across a power cycle. The release preserves the original Bluetooth implementation for reference.
-
-## Build verification
-
-The archived sketches were compiled for Arduino Uno with Arduino CLI 1.6.0, Arduino AVR Boards 1.8.8 and LiquidCrystal 1.0.7. Versions `v0.0.2` through `v0.3.0_BT` and the PCB test sketch compiled. The original `v0.0.1` fails because the DS1307 declaration is missing its RTC include and `segundo` is undeclared. This check covers compilation.
+Verify the LCD, switches, RTC, probes, relay indications and Bluetooth module on the MPS01 1.1 bench before connecting loads.

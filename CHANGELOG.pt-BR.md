@@ -6,6 +6,14 @@ As 13 versões são da linha de firmware da MPS01 1.1. As versões seguem os nom
 
 [Histórico original](docs/original/historico-de-revisao.txt)
 
+## v0.4.0-beta
+
+- Substitui as esperas dos menus por eventos de botões com debounce, toque longo para voltar ou cancelar e repetição durante a edição.
+- Separa as demandas do aquecimento, acrescenta diagnóstico de sondas e RTC e permite agendas que cruzam a meia-noite.
+- Migra ajustes válidos da EEPROM para dois registros com CRC e corrige a gravação do modo do filtro pelo Bluetooth.
+- Adiciona protocolo UART Bluetooth v1, ajuste local de ativação e opção de remoção na compilação.
+- Compilada para Arduino Uno. Falta verificar na MPS01 1.1 física.
+
 ## v0.3.0_BT · 2021-11-12
 
 - Acrescenta os comandos seriais `1`–`6` para as duas bombas e `7` para consultar as temperaturas. Reduz os atrasos dos menus.
