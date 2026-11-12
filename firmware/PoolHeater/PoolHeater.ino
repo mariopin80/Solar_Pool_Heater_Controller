@@ -1,7 +1,7 @@
 /****************************************************/
 /* Controlador de terperatura e filtro para piscina */
 /* Autor: Mario Pin                                 */
-/* Vesão: 0.0.2 - 25/05/2021                        */
+/* Vesão: 0.0.3 - 27/05/2021                        */
 /****************************************************/
 
 #include <LiquidCrystal.h>
@@ -31,7 +31,7 @@ LiquidCrystal lcd(7, 8, 9, 10, 11, 12); //define pinos do LCD (RS, E, D4, D5, D6
 BigNums2x2 bigNuma(NASA); // inicializa as fontes grandes
 
 //cria os possiveis estados do menu e inicializa em HOME
-enum Estados{HOME, GERAL, AJUSTES_AQC, AJUSTES_FIL, AJUSTES_TEC, ADJ_T, DIFF_ON, DIFF_OFF};
+enum Estados{HOME, GERAL, AJUSTES_AQC, AJUSTES_FIL, AJUSTES_TEC, ADJ_T, DIFF_ON, DIFF_OFF, PSC_OS, CLT_OS};
 Estados estado = HOME;
 
 //strings para os dias da semana
@@ -83,6 +83,7 @@ void setup(){
   EEPROM.get(8, difTempOFF);
   EEPROM.get(12, pscOS);
   EEPROM.get(16, cltOS);
+ 
 
   //inicializa entradas e saidas
   pinMode(PB1, INPUT_PULLUP);
@@ -340,7 +341,7 @@ void loop(){
         }
       EEPROM.put(8, difTempOFF);
       if (digitalRead(PB2) == LOW)
-        estado = AJUSTES_TEC;
+        estado = PSC_OS;
       if (digitalRead(PB3) == LOW)
         estado = AJUSTES_TEC;    
       delay(300);
@@ -348,8 +349,87 @@ void loop(){
       break;
       }
 
+    case PSC_OS:{  //***********************Ajuste de Offset sensor da piscina *************************
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("OFFSET SENS. PSC");
+      while (digitalRead(PB2) && digitalRead(PB3) == HIGH){
+        atualiza_sistema();
+        lcd.setCursor(1,1);
+        lcd.print(pscOS, 1); lcd.write(223); lcd.print("C");
+        if (digitalRead(PB1) == LOW){
+          lcd.setCursor(0, 1);
+          lcd.write(">");
+          delay(200);
+          while (digitalRead(PB1) == HIGH){
+            atualiza_sistema();
+            delay(100);
+            if (digitalRead (PB2) == LOW){
+              pscOS = pscOS + 0.1;
+              lcd.setCursor(1,1);
+              lcd.print(pscOS, 1); lcd.write(223); lcd.print("C  ");
+            }
+            if (digitalRead (PB3) == LOW){
+              pscOS = pscOS - 0.1;
+              lcd.setCursor(1,1);
+              lcd.print(pscOS, 1); lcd.write(223); lcd.print("C  ");
+            }
+          }
+          lcd.setCursor(0,1);
+          lcd.print(" ");
+         }
+        delay(200);
+        }
+      EEPROM.put(12, pscOS);
+      if (digitalRead(PB2) == LOW)
+        estado = CLT_OS;
+      if (digitalRead(PB3) == LOW)
+        estado = AJUSTES_TEC;    
+      delay(300);
 
+      break;
+      }
 
+    case CLT_OS:{  //***********************Ajuste de Offset sensor do coletor solar *************************
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("OFFSET SENS. CLT");
+      while (digitalRead(PB2) && digitalRead(PB3) == HIGH){
+        atualiza_sistema();
+        lcd.setCursor(1,1);
+        lcd.print(cltOS, 1); lcd.write(223); lcd.print("C");
+        if (digitalRead(PB1) == LOW){
+          lcd.setCursor(0, 1);
+          lcd.write(">");
+          delay(200);
+          while (digitalRead(PB1) == HIGH){
+            atualiza_sistema();
+            delay(100);
+            if (digitalRead (PB2) == LOW){
+              cltOS = cltOS + 0.1;
+              lcd.setCursor(1,1);
+              lcd.print(cltOS, 1); lcd.write(223); lcd.print("C  ");
+            }
+            if (digitalRead (PB3) == LOW){
+              cltOS = cltOS - 0.1;
+              lcd.setCursor(1,1);
+              lcd.print(cltOS, 1); lcd.write(223); lcd.print("C  ");
+            }
+          }
+          lcd.setCursor(0,1);
+          lcd.print(" ");
+         }
+        delay(200);
+        }
+      EEPROM.put(16, cltOS);
+      if (digitalRead(PB2) == LOW)
+        estado = AJUSTES_TEC;
+      if (digitalRead(PB3) == LOW)
+        estado = AJUSTES_TEC;    
+      delay(300);
+
+      break;
+      }
 
 
         
@@ -362,9 +442,9 @@ void atualiza_sistema(){
 
   float v  = (vcc*analogRead(PSC))/1023;
   float rt = (vcc*R)/v - R;
-  pscTemp  = (beta / log(rt/rx)) - 273;
+  pscTemp  = (beta / log(rt/rx)) - 273 + pscOS;
     
-  cltTemp  = 0.05376 * analogRead(CLT);
+  cltTemp  = 0.05376 * analogRead(CLT) + cltOS;
   
   if(cltTemp < DeICE || cltTemp > OverHeat) // verifica as condicoes excepcionais - congelamento e sobreaquecimento
     digitalWrite(AQC, HIGH);
